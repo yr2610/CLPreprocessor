@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Express 15 for Windows Desktop
+VisualStudioVersion = 15.0.35213.121
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CLPreprocessor", "CLPreprocessor\CLPreprocessor.csproj", "{76E9292D-E5A8-4FEC-953F-F51A53A929FA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{76E9292D-E5A8-4FEC-953F-F51A53A929FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76E9292D-E5A8-4FEC-953F-F51A53A929FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76E9292D-E5A8-4FEC-953F-F51A53A929FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76E9292D-E5A8-4FEC-953F-F51A53A929FA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4D7E94AB-6DAF-4125-9565-11179F16B85A}
+	EndGlobalSection
+EndGlobal
