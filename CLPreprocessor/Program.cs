@@ -133,6 +133,7 @@ public class Preprocessor
         }
     }
 
+#if false
     private class ArrayReader
     {
         private List<LineObject> lines;
@@ -146,6 +147,7 @@ public class Preprocessor
         public bool AtEnd => index >= lines.Count;
         public LineObject Read() => AtEnd ? null : lines[index++];
     }
+#endif
 
     private bool CurrentCondition()
     {
@@ -258,33 +260,35 @@ public class Preprocessor
         //parseSet(name + " = false", lineObj);
     }
 
+#if false
     // TODO: 移植
-    //private void ParseSet(string option, LineObject lineObj)
-    //{
-    //    if (!CurrentCondition()) return;
-    //
-    //    var optionMatch = Regex.Match(option, @"^([a-zA-Z_]\w*)\s*=\s*(.+)?$");
-    //    if (!optionMatch.Success)
-    //        throw new ParseException("@set command syntax is incorrect.", lineObj);
-    //
-    //    var name = optionMatch.Groups[1].Value;
-    //    var value = optionMatch.Groups[2].Value;
-    //
-    //    if (IsReservedName(name))
-    //        throw new ParseException("Reserved word used as variable name.", lineObj);
-    //
-    //    if (defines.Contains(name))
-    //        throw new ParseException($"Variable {name} is already defined.", lineObj);
-    //
-    //    try
-    //    {
-    //        defines[name] = EvaluateFormula(value, defines);
-    //    }
-    //    catch
-    //    {
-    //        throw new ParseException($"The right-hand side expression '{value}' is invalid.", lineObj);
-    //    }
-    //}
+    private void ParseSet(string option, LineObject lineObj)
+    {
+        if (!CurrentCondition()) return;
+    
+        var optionMatch = Regex.Match(option, @"^([a-zA-Z_]\w*)\s*=\s*(.+)?$");
+        if (!optionMatch.Success)
+            throw new ParseException("@set command syntax is incorrect.", lineObj);
+    
+        var name = optionMatch.Groups[1].Value;
+        var value = optionMatch.Groups[2].Value;
+    
+        if (IsReservedName(name))
+            throw new ParseException("Reserved word used as variable name.", lineObj);
+    
+        if (defines.Contains(name))
+            throw new ParseException($"Variable {name} is already defined.", lineObj);
+    
+        try
+        {
+            defines[name] = EvaluateFormula(value, defines);
+        }
+        catch
+        {
+            throw new ParseException($"The right-hand side expression '{value}' is invalid.", lineObj);
+        }
+    }
+#endif
 
     readonly HashSet<string> reserved = new HashSet<string>
     {
@@ -479,14 +483,12 @@ public class Preprocessor
     public List<LineObject> PreProcessConditionalCompile(List<LineObject> lines, HashSet<string> defines, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> templateVariables)
     {
         this.defines = new HashSet<string>(defines);
-        var srcLines = new ArrayReader(lines);
         var dstLines = new List<LineObject>();
 
         try
         {
-            while (!srcLines.AtEnd)
+            foreach (var lineObj in lines)
             {
-                var lineObj = srcLines.Read();
                 var line = lineObj.Lines[0];
 
                 var commandMatch = Regex.Match(line, @"^@([a-zA-Z]+)(\s+(.+))?$");
