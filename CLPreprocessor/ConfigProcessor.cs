@@ -80,6 +80,16 @@ public class ConfigProcessor
         using (var engine = new V8ScriptEngine())
         {
             engine.AddHostObject("data", data);
+
+            // 実行ファイルのディレクトリを取得
+            var exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            var lodashPath = Path.Combine(exeDirectory, "scripts", "lodash.min.js");
+
+            // Lodashのスクリプトを読み込んで実行
+            var lodashScript = File.ReadAllText(lodashPath);
+            engine.Execute(lodashScript);
+
+            // ユーザーのスクリプトを実行
             engine.Execute(script);
         }
     }
