@@ -11,17 +11,14 @@ public class ConfigProcessor
 {
     private static readonly Regex TemplateRegex = new Regex(@"\{\{=([\s\S]+?)\}\}", RegexOptions.Compiled);
     private readonly Dictionary<string, object> _variables = new Dictionary<string, object>();
+    private readonly List<ScriptObject> _postProcessFunctions = new List<ScriptObject>();
 
     public Dictionary<string, object> ReadConfigFile(string confFileName)
     {
         var data = ReadYamlFile(confFileName);
-        var postProcess = new List<Action<Dictionary<string, object>>>();
 
-        ProcessIncludeFiles(data, Path.GetDirectoryName(confFileName), postProcess);
-        foreach (var process in postProcess)
-        {
-            process(data);
-        }
+        ProcessIncludeFiles(data, Path.GetDirectoryName(confFileName));
+        ExecutePostProcessFunctions(data);
 
         ProcessTemplates(data, data);
 
@@ -44,7 +41,7 @@ public class ConfigProcessor
         }
     }
 
-    private void ProcessIncludeFiles(Dictionary<string, object> data, string baseDirectory, List<Action<Dictionary<string, object>>> postProcess)
+    private void ProcessIncludeFiles(Dictionary<string, object> data, string baseDirectory)
     {
         if (data.ContainsKey("$include"))
         {
@@ -55,7 +52,7 @@ public class ConfigProcessor
             {
                 var includeFilePath = Path.Combine(baseDirectory, includeFile.ToString());
                 var includeData = ReadYamlFile(includeFilePath);
-                ProcessIncludeFiles(includeData, Path.GetDirectoryName(includeFilePath), postProcess);
+                ProcessIncludeFiles(includeData, Path.GetDirectoryName(includeFilePath));
                 foreach (var kvp in includeData)
                 {
                     if (!data.ContainsKey(kvp.Key))
@@ -69,28 +66,49 @@ public class ConfigProcessor
         if (data.ContainsKey("$post_process"))
         {
             var script = data["$post_process"].ToString();
-            var process = new Action<Dictionary<string, object>>(d => ExecuteScript(script, d));
-            postProcess.Add(process);
+            AddPostProcessFunction(script);
             data.Remove("$post_process");
         }
     }
 
-    private void ExecuteScript(string script, Dictionary<string, object> data)
+    private void AddPostProcessFunction(string script)
+    {
+        using (var engine = new V8ScriptEngine())
+        {
+            // Lodashのスクリプトを読み込んで実行
+            var exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            var lodashPath = Path.Combine(exeDirectory, "scripts", "lodash.min.js");
+            var lodashScript = File.ReadAllText(lodashPath);
+            engine.Execute(lodashScript);
+
+            // 関数を文字列として渡し、関数オブジェクトとして保持
+            var functionScript = $"var postProcessFunction = {script}; postProcessFunction;";
+            var functionObject = engine.Evaluate(functionScript) as ScriptObject;
+            if (functionObject != null)
+            {
+                _postProcessFunctions.Add(functionObject);
+            }
+        }
+    }
+
+    private void ExecutePostProcessFunctions(Dictionary<string, object> data)
     {
         using (var engine = new V8ScriptEngine())
         {
             engine.AddHostObject("data", data);
 
-            // 実行ファイルのディレクトリを取得
+            // Lodashのスクリプトを読み込んで実行
             var exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var lodashPath = Path.Combine(exeDirectory, "scripts", "lodash.min.js");
-
-            // Lodashのスクリプトを読み込んで実行
             var lodashScript = File.ReadAllText(lodashPath);
             engine.Execute(lodashScript);
 
-            // ユーザーのスクリプトを実行
-            engine.Execute(script);
+            // 保持しているpostProcess関数を実行
+            foreach (var function in _postProcessFunctions)
+            {
+                engine.Script.postProcessFunction = function;
+                engine.Execute("postProcessFunction(data);");
+            }
         }
     }
 
