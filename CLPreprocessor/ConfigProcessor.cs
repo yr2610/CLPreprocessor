@@ -48,11 +48,10 @@ public class ConfigProcessor
     {
         if (!File.Exists(filePath))
         {
-            return new ExpandoObject();
+            return new Dictionary<string, object>();
         }
 
         var deserializer = new DeserializerBuilder()
-            .WithNodeTypeResolver(new ExpandoObjectNodeTypeResolver())
             .Build();
 
         using (var reader = new StreamReader(filePath))
@@ -63,17 +62,17 @@ public class ConfigProcessor
 
             if (yamlStream.Documents.Count == 0)
             {
-                return new ExpandoObject();
+                return new Dictionary<string, object>();
             }
 
             var rootNode = yamlStream.Documents[0].RootNode;
             if (rootNode is YamlSequenceNode)
             {
-                return deserializer.Deserialize<List<ExpandoObject>>(new StringReader(yaml));
+                return deserializer.Deserialize<List<Dictionary<string, object>>>(new StringReader(yaml));
             }
             else if (rootNode is YamlMappingNode)
             {
-                return deserializer.Deserialize<ExpandoObject>(new StringReader(yaml));
+                return deserializer.Deserialize<Dictionary<string, object>>(new StringReader(yaml));
             }
             else
             {
