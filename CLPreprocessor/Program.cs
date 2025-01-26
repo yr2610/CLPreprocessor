@@ -552,6 +552,15 @@ public class Program
             return;
         }
 
+#if true
+        ConfigProcessor cp = new ConfigProcessor();
+        var result = cp.ReadConfigFile(filePath);
+        var serializer = new YamlDotNet.Serialization.SerializerBuilder()
+            .Build();
+        var yaml = serializer.Serialize(result);
+        return;
+#endif
+
         try
         {
             // XXX: 外から渡せるように
