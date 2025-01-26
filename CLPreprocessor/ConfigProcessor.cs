@@ -21,6 +21,17 @@ public class ConfigProcessor
     public ConfigProcessor()
     {
         _engine = new V8ScriptEngine();
+
+        _engine.AddHostType(typeof(DialogUtils));
+        _engine.AddHostType(typeof(PathUtils));
+
+        //_engine.Execute(@"
+        //        var basePath = 'C:\\base\\path';
+        //        var targetPath = 'C:\\base\\path\\to\\file.txt';
+        //        var relative = PathUtils.getRelativePath(basePath, targetPath);
+        //        DialogUtils.showMessage(`Relative path: ${relative}`);
+        //    ");
+
         LoadLodash();
     }
 
@@ -180,7 +191,7 @@ public class ConfigProcessor
     {
         foreach (var key in ((IDictionary<string, object>)data).Keys.ToList())
         {
-            if (((IDictionary<string, object>)data)[key] is ExpandoObject childData)
+            if (((IDictionary<string, object>)data)[key] is IDictionary<string, object> childData)
             {
                 CompileForAllChildren(rootData, childData);
             }
@@ -188,7 +199,7 @@ public class ConfigProcessor
             {
                 foreach (var item in listData)
                 {
-                    if (item is ExpandoObject listItemData)
+                    if (item is IDictionary<string, object> listItemData)
                     {
                         CompileForAllChildren(rootData, listItemData);
                     }
