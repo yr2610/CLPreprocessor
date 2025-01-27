@@ -27,7 +27,6 @@ public class PathUtils
         Uri toUri = new Uri(fullToPath);
         Uri relativeUri = fromUri.MakeRelativeUri(toUri);
         string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-        System.Windows.Forms.MessageBox.Show($"{fromUri}\n{toUri}\n{relativePath}");
 
         // ディレクトリを示す場合は末尾にディレクトリセパレータを付ける
         if (Directory.Exists(fullToPath))
