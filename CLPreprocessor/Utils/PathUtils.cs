@@ -7,27 +7,35 @@ using System.IO;
 
 public class PathUtils
 {
-    static string GetRelativePath(string fromPath, string toPath)
+    public static string GetRelativePath(string fromPath, string toPath)
     {
-        // 絶対パスに変換
-        string from = Path.GetFullPath(fromPath);
-        string to = Path.GetFullPath(toPath);
+        // 現在の作業ディレクトリ
+        string currentDirectory = Environment.CurrentDirectory;
 
-        Uri fromUri = new Uri(from);
-        Uri toUri = new Uri(to);
+        // fromPathが相対パスの場合、現在のディレクトリから絶対パスに変換
+        string fullFromPath = Path.IsPathRooted(fromPath)
+            ? fromPath
+            : Path.GetFullPath(Path.Combine(currentDirectory, fromPath));
 
+        // toPathも同様に絶対パスに変換
+        string fullToPath = Path.IsPathRooted(toPath)
+            ? toPath
+            : Path.GetFullPath(Path.Combine(currentDirectory, toPath));
+
+        // 相対パスを計算
+        Uri fromUri = new Uri(fullFromPath);
+        Uri toUri = new Uri(fullToPath);
         Uri relativeUri = fromUri.MakeRelativeUri(toUri);
         string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-
-        if (relativePath.StartsWith("..\\") || relativePath.StartsWith("../"))
-        {
-            return relativePath;
-        }
+        System.Windows.Forms.MessageBox.Show($"{fromUri}\n{toUri}\n{relativePath}");
 
         // ディレクトリを示す場合は末尾にディレクトリセパレータを付ける
-        if (Directory.Exists(to))
+        if (Directory.Exists(fullToPath))
         {
-            relativePath += Path.DirectorySeparatorChar;
+            if (!relativePath.EndsWith(Path.DirectorySeparatorChar.ToString()))
+            {
+                relativePath += Path.DirectorySeparatorChar;
+            }
         }
 
         return relativePath;
