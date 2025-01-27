@@ -14,7 +14,6 @@ using YamlDotNet.RepresentationModel;
 
 public class ConfigProcessor
 {
-    private static readonly Regex TemplateRegex = new Regex(@"\{\{=([\s\S]+?)\}\}", RegexOptions.Compiled);
     private readonly List<ScriptObject> _postProcessFunctions = new List<ScriptObject>();
     private readonly V8ScriptEngine _engine;
 
@@ -33,6 +32,7 @@ public class ConfigProcessor
         //    ");
 
         LoadLodash();
+        ConfigureLodashTemplateSettings();
     }
 
     private void LoadLodash()
@@ -43,12 +43,27 @@ public class ConfigProcessor
         _engine.Execute(lodashScript);
     }
 
+    private void ConfigureLodashTemplateSettings()
+    {
+        string script = @"
+            _.templateSettings = {
+                evaluate: /\{\{([\s\S]+?)\}\}/g,
+                interpolate: /\{\{=([\s\S]+?)\}\}/g,
+                escape: /\{\{-([\s\S]+?)\}\}/g
+            };
+        ";
+        _engine.Execute(script);
+    }
+
     public dynamic ReadConfigFile(string confFileName)
     {
         var data = ReadYamlFile(confFileName);
 
+        _engine.Script.filePath = confFileName;
+
+        ProcessFunctions(data);
         ProcessIncludeFiles(data, Path.GetDirectoryName(confFileName));
-        ExecutePostProcessFunctions(data);
+        ExecutePostProcessFunctions(ref data);
 
         ProcessTemplates(data, data);
 
@@ -92,6 +107,25 @@ public class ConfigProcessor
         }
     }
 
+    private void ProcessFunctions(dynamic data)
+    {
+        var dataDict = (IDictionary<string, object>)data;
+
+        if (dataDict.ContainsKey("$functions"))
+        {
+            var functions = (Dictionary<object, object>)dataDict["$functions"];
+            dataDict.Remove("$functions");
+
+            foreach (var function in functions)
+            {
+                var key = function.Key.ToString();
+                var value = function.Value.ToString();
+                var functionScript = $"var {key} = {value};";
+                _engine.Execute(functionScript);
+            }
+        }
+    }
+
     private void ProcessIncludeFiles(dynamic data, string baseDirectory)
     {
         var dataDict = (IDictionary<string, object>)data;
@@ -116,6 +150,9 @@ public class ConfigProcessor
             }
         }
 
+        // Process functions within included files
+        ProcessFunctions(data);
+
         if (dataDict.ContainsKey("$post_process"))
         {
             var script = dataDict["$post_process"].ToString();
@@ -135,9 +172,11 @@ public class ConfigProcessor
         }
     }
 
-    private void ExecutePostProcessFunctions(dynamic data)
+    private void ExecutePostProcessFunctions(ref dynamic data)
     {
-        _engine.AddHostObject("data", data);
+        var jsData = ConvertToJsObject(data);
+
+        _engine.AddHostObject("data", jsData);
 
         // 保持しているpostProcess関数を実行
         foreach (var function in _postProcessFunctions)
@@ -145,6 +184,9 @@ public class ConfigProcessor
             _engine.Script.postProcessFunction = function;
             _engine.Execute("postProcessFunction(data);");
         }
+
+        // 更新されたdataを取得
+        data = _engine.Script.data;
     }
 
     private void ProcessTemplates(dynamic rootData, dynamic data)
@@ -163,7 +205,7 @@ public class ConfigProcessor
                 }
 
                 var value = ((IDictionary<string, object>)data)[key].ToString();
-                if (!TemplateRegex.IsMatch(value))
+                if (!IsTemplate(value))
                 {
                     finished.Add(key);
                     continue;
@@ -178,13 +220,54 @@ public class ConfigProcessor
         CompileForAllChildren(rootData, data);
     }
 
+    private bool IsTemplate(string value)
+    {
+        return value.Contains("{{") && value.Contains("}}");
+    }
+
+    private object ConvertToJsObject(object data)
+    {
+        if (data is Dictionary<string, object> dict)
+        {
+            var jsDict = new ExpandoObject();
+            var jsDictDict = (IDictionary<string, object>)jsDict;
+            foreach (var kvp in dict)
+            {
+                jsDictDict[kvp.Key] = ConvertToJsObject(kvp.Value);
+            }
+            return jsDict;
+        }
+        else if (data is List<object> list)
+        {
+            return list.Select(ConvertToJsObject).ToList();
+        }
+        else
+        {
+            return data; // 基本データ型やその他はそのまま返す
+        }
+    }
+
     private string CompileTemplate(string template, dynamic data)
     {
-        return TemplateRegex.Replace(template, match =>
-        {
-            var key = match.Groups[1].Value.Trim();
-            return ((IDictionary<string, object>)data).ContainsKey(key) ? ((IDictionary<string, object>)data)[key].ToString() : string.Empty;
-        });
+        var jsData = ConvertToJsObject(data);
+
+        // エスケープされたテンプレート文字列を作成
+        string escapedTemplate = template.Replace("`", "\\`").Replace("$", "\\$");
+
+        // dataオブジェクトをJavaScriptエンジンに追加
+        _engine.AddHostObject("data", jsData);
+
+        // デバッグ用のログ出力
+        Console.WriteLine("Template: " + escapedTemplate);
+        Console.WriteLine("Data: " + Newtonsoft.Json.JsonConvert.SerializeObject(jsData, Newtonsoft.Json.Formatting.Indented));
+
+        // テンプレートを評価
+        string script = $@"
+            //DialogUtils.showMessage(Object.keys(data).join('\n'));
+            var compiled = _.template(`{escapedTemplate}`);
+            compiled(data);
+        ";
+        return _engine.Evaluate(script).ToString();
     }
 
     private void CompileForAllChildren(dynamic rootData, dynamic data)
@@ -205,23 +288,10 @@ public class ConfigProcessor
                     }
                 }
             }
-            else if (((IDictionary<string, object>)data)[key] is string strValue && TemplateRegex.IsMatch(strValue))
+            else if (((IDictionary<string, object>)data)[key] is string strValue && IsTemplate(strValue))
             {
                 ((IDictionary<string, object>)data)[key] = CompileTemplate(strValue, rootData);
             }
         }
-    }
-}
-
-public class ExpandoObjectNodeTypeResolver : INodeTypeResolver
-{
-    public bool Resolve(NodeEvent nodeEvent, ref Type currentType)
-    {
-        if (currentType == typeof(object))
-        {
-            currentType = typeof(ExpandoObject);
-            return true;
-        }
-        return false;
     }
 }
