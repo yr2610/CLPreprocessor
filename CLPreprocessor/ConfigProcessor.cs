@@ -126,6 +126,17 @@ public class ConfigProcessor
         }
     }
 
+    private void ProcessPath(dynamic data, string baseDirectory)
+    {
+        var dataDict = (IDictionary<string, object>)data;
+
+        if (dataDict.ContainsKey("$rootDirectory"))
+        {
+            var rootDirectory = dataDict["$rootDirectory"].ToString();
+            dataDict["$rootDirectory"] = Path.Combine(baseDirectory, rootDirectory);
+        }
+    }
+
     private void ProcessIncludeFiles(dynamic data, string baseDirectory)
     {
         var dataDict = (IDictionary<string, object>)data;
@@ -152,6 +163,9 @@ public class ConfigProcessor
 
         // Process functions within included files
         ProcessFunctions(data);
+
+        // Process paths within included files
+        ProcessPath(data, baseDirectory);
 
         if (dataDict.ContainsKey("$post_process"))
         {
@@ -280,11 +294,15 @@ public class ConfigProcessor
             }
             else if (((IDictionary<string, object>)data)[key] is List<object> listData)
             {
-                foreach (var item in listData)
+                for (int i = 0; i < listData.Count; i++)
                 {
-                    if (item is IDictionary<string, object> listItemData)
+                    if (listData[i] is IDictionary<string, object> listItemData)
                     {
                         CompileForAllChildren(rootData, listItemData);
+                    }
+                    else if (listData[i] is string strValue && IsTemplate(strValue))
+                    {
+                        listData[i] = CompileTemplate(strValue, rootData);
                     }
                 }
             }
