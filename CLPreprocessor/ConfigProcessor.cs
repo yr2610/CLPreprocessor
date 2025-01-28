@@ -321,14 +321,13 @@ public class ConfigProcessor
         {
             var value = ((IDictionary<string, object>)data)[key];
 
-            // まず string, object としてキャストを試みる
             if (value is IDictionary<string, object> childData)
             {
                 CompileForAllChildren(rootData, childData);
             }
             else if (value is IDictionary<object, object> objectDict)
             {
-                // object, object の辞書を string, object に変換
+                // object, object の辞書を string, object に変換し、再帰的に処理
                 var stringDict = new Dictionary<string, object>();
                 foreach (var pair in objectDict)
                 {
@@ -343,7 +342,9 @@ public class ConfigProcessor
                         stringDict[pair.Key.ToString()] = pair.Value; // 文字列に変換
                     }
                 }
+                // 再帰的に処理した結果を元のデータ構造に反映
                 CompileForAllChildren(rootData, stringDict);
+                ((IDictionary<string, object>)data)[key] = stringDict; // 元のデータに反映
             }
             else if (value is List<object> listData)
             {
