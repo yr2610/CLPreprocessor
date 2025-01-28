@@ -556,6 +556,7 @@ public class Program
         ConfigProcessor cp = new ConfigProcessor();
         var result = cp.ReadConfigFile(filePath);
         var serializer = new YamlDotNet.Serialization.SerializerBuilder()
+            .WithTypeConverter(new DateTimeConverter())
             .Build();
         var yaml = serializer.Serialize(result);
         return;

@@ -12,6 +12,36 @@ using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NodeTypeResolvers;
 using YamlDotNet.RepresentationModel;
 
+public class DateTimeConverter : IYamlTypeConverter
+{
+    public bool Accepts(Type type)
+    {
+        return type == typeof(DateTime);
+    }
+
+    public object ReadYaml(IParser parser, Type type, ObjectDeserializer nestedObjectDeserializer)
+    {
+        var scalar = parser.Consume<Scalar>();
+        if (DateTime.TryParse(scalar.Value, out var result))
+        {
+            return result;
+        }
+        throw new YamlException($"Could not parse '{scalar.Value}' as a DateTime.");
+    }
+
+    public void WriteYaml(IEmitter emitter, object value, Type type, ObjectSerializer nestedObjectSerializer)
+    {
+        if (value is DateTime dateTime)
+        {
+            emitter.Emit(new Scalar(dateTime.ToString("yyyy-MM-dd"))); // または他の希望する形式
+        }
+        else
+        {
+            throw new YamlException("Expected a DateTime value.");
+        }
+    }
+}
+
 public class ConfigProcessor
 {
     private readonly List<ScriptObject> _postProcessFunctions = new List<ScriptObject>();
@@ -78,6 +108,7 @@ public class ConfigProcessor
         }
 
         var deserializer = new DeserializerBuilder()
+            .WithTypeConverter(new DateTimeConverter())
             .Build();
 
         using (var reader = new StreamReader(filePath))
@@ -272,8 +303,8 @@ public class ConfigProcessor
         _engine.AddHostObject("data", jsData);
 
         // デバッグ用のログ出力
-        Console.WriteLine("Template: " + escapedTemplate);
-        Console.WriteLine("Data: " + Newtonsoft.Json.JsonConvert.SerializeObject(jsData, Newtonsoft.Json.Formatting.Indented));
+        //Console.WriteLine("Template: " + escapedTemplate);
+        //Console.WriteLine("Data: " + Newtonsoft.Json.JsonConvert.SerializeObject(jsData, Newtonsoft.Json.Formatting.Indented));
 
         // テンプレートを評価
         string script = $@"
@@ -288,11 +319,33 @@ public class ConfigProcessor
     {
         foreach (var key in ((IDictionary<string, object>)data).Keys.ToList())
         {
-            if (((IDictionary<string, object>)data)[key] is IDictionary<string, object> childData)
+            var value = ((IDictionary<string, object>)data)[key];
+
+            // まず string, object としてキャストを試みる
+            if (value is IDictionary<string, object> childData)
             {
                 CompileForAllChildren(rootData, childData);
             }
-            else if (((IDictionary<string, object>)data)[key] is List<object> listData)
+            else if (value is IDictionary<object, object> objectDict)
+            {
+                // object, object の辞書を string, object に変換
+                var stringDict = new Dictionary<string, object>();
+                foreach (var pair in objectDict)
+                {
+                    if (pair.Key is string keyString)
+                    {
+                        stringDict[keyString] = pair.Value;
+                    }
+                    else
+                    {
+                        // キーと値の型が期待通りでない場合の処理
+                        Console.WriteLine($"Warning: Non-string key detected: {pair.Key}");
+                        stringDict[pair.Key.ToString()] = pair.Value; // 文字列に変換
+                    }
+                }
+                CompileForAllChildren(rootData, stringDict);
+            }
+            else if (value is List<object> listData)
             {
                 for (int i = 0; i < listData.Count; i++)
                 {
@@ -306,7 +359,7 @@ public class ConfigProcessor
                     }
                 }
             }
-            else if (((IDictionary<string, object>)data)[key] is string strValue && IsTemplate(strValue))
+            else if (value is string strValue && IsTemplate(strValue))
             {
                 ((IDictionary<string, object>)data)[key] = CompileTemplate(strValue, rootData);
             }
