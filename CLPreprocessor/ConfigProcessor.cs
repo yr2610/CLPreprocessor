@@ -188,7 +188,9 @@ public class ConfigProcessor
         if (data.ContainsKey("$rootDirectory"))
         {
             var rootDirectory = data["$rootDirectory"].ToString();
-            data["$rootDirectory"] = Path.Combine(baseDirectory, rootDirectory);
+            var combinedPath = Path.Combine(baseDirectory, rootDirectory);
+            var fullPath = Path.GetFullPath(combinedPath);
+            data["$rootDirectory"] = fullPath;
         }
     }
 
