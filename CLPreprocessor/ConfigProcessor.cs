@@ -162,23 +162,6 @@ public class ConfigProcessor
 
             var updatedJsData = _engine.Script.data;
             data = (IDictionary<string, object>)ConvertFromJsObject(updatedJsData);
-
-            if (data.ContainsKey("formatDate"))
-            {
-                var formatDate = data["formatDate"];
-                if (formatDate is ScriptObject)
-                {
-                    Console.WriteLine("formatDate is a ScriptObject.");
-                }
-                else
-                {
-                    Console.WriteLine($"formatDate is not a ScriptObject, it's a {formatDate?.GetType().Name ?? "null"}");
-                }
-            }
-            else
-            {
-                Console.WriteLine("formatDate function not found in data.");
-            }
         }
         return data;
     }
@@ -367,10 +350,6 @@ public class ConfigProcessor
 
         // dataオブジェクトをJavaScriptエンジンに追加
         _engine.AddHostObject("data", jsData);
-
-        // デバッグ用のログ出力
-        //Console.WriteLine("Template: " + escapedTemplate);
-        //Console.WriteLine("Data: " + Newtonsoft.Json.JsonConvert.SerializeObject(jsData, Newtonsoft.Json.Formatting.Indented));
 
         // テンプレートを評価
         string script = $@"
