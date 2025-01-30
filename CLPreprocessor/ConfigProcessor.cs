@@ -91,9 +91,13 @@ public class ConfigProcessor
 
         _engine.Script.filePath = confFileName;
 
-        ProcessFunctions(data);
-        ProcessIncludeFiles(data, Path.GetDirectoryName(confFileName));
-        ExecutePostProcessFunctions(ref data);
+        // dataオブジェクトをJavaScriptエンジンに追加
+        var jsData = ConvertToJsObject(data);
+        _engine.AddHostObject("data", jsData);
+
+        data = ProcessFunctions(data);
+        data = ProcessIncludeFiles(data, Path.GetDirectoryName(confFileName));
+        data = ExecutePostProcessFunctions(data);
 
         ProcessTemplates(data, data);
 
@@ -138,72 +142,79 @@ public class ConfigProcessor
         }
     }
 
-    private void ProcessFunctions(dynamic data)
+    private IDictionary<string, object> ProcessFunctions(IDictionary<string, object> data)
     {
-        var dataDict = (IDictionary<string, object>)data;
-
-        if (dataDict.ContainsKey("$functions"))
+        if (data.ContainsKey("$functions"))
         {
-            var functions = (Dictionary<object, object>)dataDict["$functions"];
-            dataDict.Remove("$functions");
+            var functions = (Dictionary<object, object>)data["$functions"];
+            data.Remove("$functions");
+
+            // JavaScriptエンジンにdataを追加
+            var jsData = ConvertToJsObject(data);
+            _engine.AddHostObject("data", jsData);
 
             foreach (var function in functions)
             {
                 var key = function.Key.ToString();
                 var value = function.Value.ToString();
-                var functionScript = $"var {key} = {value};";
+                var functionScript = $"data.{key} = {value};";
                 _engine.Execute(functionScript);
             }
+
+            // エンジンから更新されたdataを取得し、C#のデータ構造に変換
+            var updatedJsData = _engine.Script.data;
+            data = ConvertFromJsObject(updatedJsData);
+        }
+        return data;
+    }
+
+    private void ProcessPath(IDictionary<string, object> data, string baseDirectory)
+    {
+        if (data.ContainsKey("$rootDirectory"))
+        {
+            var rootDirectory = data["$rootDirectory"].ToString();
+            data["$rootDirectory"] = Path.Combine(baseDirectory, rootDirectory);
         }
     }
 
-    private void ProcessPath(dynamic data, string baseDirectory)
+    private IDictionary<string, object> ProcessIncludeFiles(IDictionary<string, object> data, string baseDirectory)
     {
-        var dataDict = (IDictionary<string, object>)data;
-
-        if (dataDict.ContainsKey("$rootDirectory"))
+        if (data.ContainsKey("$include"))
         {
-            var rootDirectory = dataDict["$rootDirectory"].ToString();
-            dataDict["$rootDirectory"] = Path.Combine(baseDirectory, rootDirectory);
-        }
-    }
-
-    private void ProcessIncludeFiles(dynamic data, string baseDirectory)
-    {
-        var dataDict = (IDictionary<string, object>)data;
-
-        if (dataDict.ContainsKey("$include"))
-        {
-            var includeFiles = (List<object>)dataDict["$include"];
-            dataDict.Remove("$include");
+            var includeFiles = (List<object>)data["$include"];
+            data.Remove("$include");
 
             foreach (var includeFile in includeFiles)
             {
                 var includeFilePath = Path.Combine(baseDirectory, includeFile.ToString());
                 var includeData = ReadYamlFile(includeFilePath);
-                ProcessIncludeFiles(includeData, Path.GetDirectoryName(includeFilePath));
+
+                // includeDataを現在のdataにマージ
                 foreach (var kvp in (IDictionary<string, object>)includeData)
                 {
-                    if (!dataDict.ContainsKey(kvp.Key))
+                    if (!data.ContainsKey(kvp.Key))
                     {
-                        dataDict[kvp.Key] = kvp.Value;
+                        data[kvp.Key] = kvp.Value;
                     }
                 }
+
+                // 再帰的にincludeファイルを処理
+                data = ProcessIncludeFiles(data, Path.GetDirectoryName(includeFilePath));
             }
         }
 
-        // Process functions within included files
-        ProcessFunctions(data);
-
-        // Process paths within included files
+        // 関数やパスを処理する部分は、dataをエンジンに書き戻す代わりにdataそのものを変更
+        data = ProcessFunctions(data);
         ProcessPath(data, baseDirectory);
 
-        if (dataDict.ContainsKey("$post_process"))
+        if (data.ContainsKey("$post_process"))
         {
-            var script = dataDict["$post_process"].ToString();
+            var script = data["$post_process"].ToString();
             AddPostProcessFunction(script);
-            dataDict.Remove("$post_process");
+            data.Remove("$post_process");
         }
+
+        return data;
     }
 
     private void AddPostProcessFunction(string script)
@@ -217,10 +228,9 @@ public class ConfigProcessor
         }
     }
 
-    private void ExecutePostProcessFunctions(ref dynamic data)
+    private IDictionary<string, object> ExecutePostProcessFunctions(IDictionary<string, object> data)
     {
         var jsData = ConvertToJsObject(data);
-
         _engine.AddHostObject("data", jsData);
 
         // 保持しているpostProcess関数を実行
@@ -230,8 +240,9 @@ public class ConfigProcessor
             _engine.Execute("postProcessFunction(data);");
         }
 
-        // 更新されたdataを取得
-        data = _engine.Script.data;
+        // 更新されたdataを取得し、C#のデータ構造に変換
+        var updatedJsData = _engine.Script.data;
+        return ConvertFromJsObject(updatedJsData);
     }
 
     private void ProcessTemplates(dynamic rootData, dynamic data)
@@ -289,6 +300,37 @@ public class ConfigProcessor
         else
         {
             return data; // 基本データ型やその他はそのまま返す
+        }
+    }
+
+    private object ConvertFromJsObject(dynamic jsObject)
+    {
+        if (jsObject == null)
+        {
+            return null;
+        }
+
+        if (jsObject is ExpandoObject expando)
+        {
+            var dict = new Dictionary<string, object>();
+            foreach (var property in (IDictionary<string, object>)expando)
+            {
+                dict[property.Key] = ConvertFromJsObject(property.Value);
+            }
+            return dict;
+        }
+        else if (jsObject is IDictionary<string, object> dict)
+        {
+            return dict.ToDictionary(k => k.Key, v => ConvertFromJsObject(v.Value));
+        }
+        else if (jsObject is IEnumerable<object> && !(jsObject is string))
+        {
+            return ((IEnumerable<object>)jsObject).Select(ConvertFromJsObject).ToList();
+        }
+        else
+        {
+            // 基本データ型やその他の場合はそのまま返す
+            return jsObject;
         }
     }
 
