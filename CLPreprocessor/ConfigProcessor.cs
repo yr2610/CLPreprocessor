@@ -149,7 +149,6 @@ public class ConfigProcessor
             var functions = (Dictionary<object, object>)data["$functions"];
             data.Remove("$functions");
 
-            // JavaScriptエンジンにdataを追加
             var jsData = ConvertToJsObject(data);
             _engine.AddHostObject("data", jsData);
 
@@ -161,9 +160,25 @@ public class ConfigProcessor
                 _engine.Execute(functionScript);
             }
 
-            // エンジンから更新されたdataを取得し、C#のデータ構造に変換
             var updatedJsData = _engine.Script.data;
-            data = ConvertFromJsObject(updatedJsData);
+            data = (IDictionary<string, object>)ConvertFromJsObject(updatedJsData);
+
+            if (data.ContainsKey("formatDate"))
+            {
+                var formatDate = data["formatDate"];
+                if (formatDate is ScriptObject)
+                {
+                    Console.WriteLine("formatDate is a ScriptObject.");
+                }
+                else
+                {
+                    Console.WriteLine($"formatDate is not a ScriptObject, it's a {formatDate?.GetType().Name ?? "null"}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("formatDate function not found in data.");
+            }
         }
         return data;
     }
@@ -315,7 +330,15 @@ public class ConfigProcessor
             var dict = new Dictionary<string, object>();
             foreach (var property in (IDictionary<string, object>)expando)
             {
-                dict[property.Key] = ConvertFromJsObject(property.Value);
+                var value = property.Value;
+                if (value is ScriptObject scriptObj)
+                {
+                    dict[property.Key] = scriptObj; // 関数もそのまま保持
+                }
+                else
+                {
+                    dict[property.Key] = ConvertFromJsObject(value);
+                }
             }
             return dict;
         }
@@ -329,7 +352,6 @@ public class ConfigProcessor
         }
         else
         {
-            // 基本データ型やその他の場合はそのまま返す
             return jsObject;
         }
     }
