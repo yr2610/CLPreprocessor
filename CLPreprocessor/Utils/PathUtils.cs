@@ -22,6 +22,17 @@ public class PathUtils
             ? toPath
             : Path.GetFullPath(Path.Combine(currentDirectory, toPath));
 
+        // ディレクトリの場合、末尾にスラッシュを追加
+        if (Directory.Exists(fullFromPath) && !fullFromPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
+        {
+            fullFromPath += Path.DirectorySeparatorChar;
+        }
+
+        if (Directory.Exists(fullToPath) && !fullToPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
+        {
+            fullToPath += Path.DirectorySeparatorChar;
+        }
+
         // 相対パスを計算
         Uri fromUri = new Uri(fullFromPath);
         Uri toUri = new Uri(fullToPath);
@@ -29,12 +40,9 @@ public class PathUtils
         string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
 
         // ディレクトリを示す場合は末尾にディレクトリセパレータを付ける
-        if (Directory.Exists(fullToPath))
+        if (Directory.Exists(fullToPath) && !relativePath.EndsWith(Path.DirectorySeparatorChar.ToString()))
         {
-            if (!relativePath.EndsWith(Path.DirectorySeparatorChar.ToString()))
-            {
-                relativePath += Path.DirectorySeparatorChar;
-            }
+            relativePath += Path.DirectorySeparatorChar;
         }
 
         return relativePath;
