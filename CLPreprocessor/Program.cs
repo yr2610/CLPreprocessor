@@ -537,6 +537,50 @@ public class Preprocessor
 
 public class Program
 {
+
+    static string GetConfigFileName(string filePath)
+    {
+        const string DefaultConfigFileName = "config.yml";
+        const string LegacyConfigFileName = "conf.yml";
+        string baseName = Path.GetFileNameWithoutExtension(filePath);
+        string customConfigName;
+
+        // ファイル名に_indexが含まれる場合、カスタム設定ファイルを使用
+        if (baseName.EndsWith("_index", StringComparison.OrdinalIgnoreCase))
+        {
+            string nameWithoutIndex = baseName.Substring(0, baseName.Length - "_index".Length);
+
+            // まず _config.yml を探す
+            customConfigName = $"{nameWithoutIndex}_config.yml";
+            if (File.Exists(customConfigName))
+            {
+                return customConfigName;
+            }
+
+            // _config.yml が存在しない場合、_conf.yml を探す
+            customConfigName = $"{nameWithoutIndex}_conf.yml";
+            if (File.Exists(customConfigName))
+            {
+                return customConfigName;
+            }
+        }
+
+        // 新しいconfig.ymlが存在する場合、それを優先
+        if (File.Exists(DefaultConfigFileName))
+        {
+            return DefaultConfigFileName;
+        }
+
+        // もしconfig.ymlが存在しない場合、conf.ymlを使用
+        if (File.Exists(LegacyConfigFileName))
+        {
+            return LegacyConfigFileName;
+        }
+
+        // どちらも存在しない場合は、デフォルトのファイル名を返す（config.yml）
+        return DefaultConfigFileName;
+    }
+
     public static void Main(string[] args)
     {
         if (args.Length == 0)
@@ -554,7 +598,8 @@ public class Program
 
 #if true
         ConfigProcessor cp = new ConfigProcessor();
-        var result = cp.ReadConfigFile(filePath);
+        var configFilePath = GetConfigFileName(filePath);
+        var result = cp.ReadConfigFile(configFilePath);
         var serializer = new YamlDotNet.Serialization.SerializerBuilder()
             .WithTypeConverter(new DateTimeConverter())
             .Build();
