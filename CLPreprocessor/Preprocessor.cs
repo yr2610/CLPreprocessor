@@ -438,12 +438,65 @@ public class Preprocessor
         throw new ParseException(errorMessage, lineObj);
     }
 
-    // TODO; 実装
     private List<LineObject> ParseInclude(string includeFileString, string includeOptionString, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> variables, LineObject lineObj)
     {
-        // TODO: Implement include file processing logic
-        // This is a placeholder; you need to implement the actual file reading and preprocessing
-        return new List<LineObject>();
+        List<LineObject> includeLines = new List<LineObject>();
+
+        // インクルードするファイルのパスを解決
+        string includeFilePath = Path.Combine(currentProjectDirectoryFromRoot, includeFileString);
+        if (!File.Exists(includeFilePath))
+        {
+            throw new ParseException($"Include file not found: {includeFilePath}", lineObj);
+        }
+
+        string[] rawLines = File.ReadAllLines(includeFilePath, Encoding.UTF8);
+        HashSet<string> localDefines = new HashSet<string>(this.defines); // 現在の定義をコピー
+
+        // オプションの扱い（必要に応じて）
+        if (!string.IsNullOrEmpty(includeOptionString))
+        {
+            // ここでオプションをパースし、必要に応じてアクションを取る
+            // 例: オプションが "define NAME" の場合、NAME を定義に追加
+            string[] options = includeOptionString.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (options.Length > 1 && options[0].Equals("define", StringComparison.OrdinalIgnoreCase))
+            {
+                localDefines.Add(options[1]);
+            }
+        }
+
+        // インクルードファイルをラインオブジェクトとして読み込み
+        for (int i = 0; i < rawLines.Length; i++)
+        {
+            string line = rawLines[i];
+            // テンプレート変数の置換
+            foreach (var variable in variables)
+            {
+                line = line.Replace($"{{{{${variable.Key}}}}}", variable.Value);
+            }
+
+            var lineObject = new LineObject
+            {
+                StartLineNumber = i + 1,
+                EndLineNumber = i + 1,
+                OriginalStartLineNumber = i + 1,
+                OriginalFilePath = includeFilePath,
+                Lines = new List<string> { line }
+            };
+            includeLines.Add(lineObject);
+        }
+
+        // インクルードファイルに対しても条件付きコンパイルを適用
+        try
+        {
+            includeLines = PreProcessConditionalCompile(includeLines, localDefines, Path.GetDirectoryName(includeFilePath), includeFilePath, variables);
+        }
+        catch (ParseException e)
+        {
+            // エラーメッセージにインクルードファイルの情報を追加
+            throw new ParseException($"Error in included file {includeFilePath}: {e.Message}", e.LineObj);
+        }
+
+        return includeLines;
     }
 
     public List<LineObject> PreProcess(string filePath, HashSet<string> defines)
