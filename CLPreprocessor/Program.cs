@@ -12,42 +12,44 @@ public class Program
         const string DefaultConfigFileName = "config.yml";
         const string LegacyConfigFileName = "conf.yml";
         string baseName = Path.GetFileNameWithoutExtension(filePath);
-        string customConfigName;
+        string directory = Path.GetDirectoryName(filePath);
 
-        // ファイル名に_indexが含まれる場合、カスタム設定ファイルを使用
-        if (baseName.EndsWith("_index", StringComparison.OrdinalIgnoreCase))
+        // ファイルの存在をチェックするヘルパーメソッド
+        string CheckFileExists(string fileName)
         {
-            string nameWithoutIndex = baseName.Substring(0, baseName.Length - "_index".Length);
+            string fullPath = Path.Combine(directory, fileName);
+            return File.Exists(fullPath) ? fullPath : null;
+        }
 
-            // まず _config.yml を探す
-            customConfigName = $"{nameWithoutIndex}_config.yml";
-            if (File.Exists(customConfigName))
-            {
-                return customConfigName;
-            }
+        // 渡された元のファイル名に基づいてカスタム設定ファイルを探す
+        string customConfigName = CheckFileExists($"{baseName}_config.yml");
+        if (customConfigName != null)
+        {
+            return customConfigName;
+        }
 
-            // _config.yml が存在しない場合、_conf.yml を探す
-            customConfigName = $"{nameWithoutIndex}_conf.yml";
-            if (File.Exists(customConfigName))
-            {
-                return customConfigName;
-            }
+        customConfigName = CheckFileExists($"{baseName}_conf.yml");
+        if (customConfigName != null)
+        {
+            return customConfigName;
         }
 
         // 新しいconfig.ymlが存在する場合、それを優先
-        if (File.Exists(DefaultConfigFileName))
+        string defaultConfigPath = CheckFileExists(DefaultConfigFileName);
+        if (defaultConfigPath != null)
         {
-            return DefaultConfigFileName;
+            return defaultConfigPath;
         }
 
         // もしconfig.ymlが存在しない場合、conf.ymlを使用
-        if (File.Exists(LegacyConfigFileName))
+        string legacyConfigPath = CheckFileExists(LegacyConfigFileName);
+        if (legacyConfigPath != null)
         {
-            return LegacyConfigFileName;
+            return legacyConfigPath;
         }
 
-        // どちらも存在しない場合は、デフォルトのファイル名を返す（config.yml）
-        return DefaultConfigFileName;
+        // どちらも存在しない場合は null を返す
+        return null;
     }
 
     public static void Main(string[] args)
