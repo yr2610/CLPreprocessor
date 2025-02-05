@@ -34,7 +34,7 @@ public class Program
             return customConfigName;
         }
 
-        // 新しいconfig.ymlが存在する場合、それを優先
+        // config.ymlが存在する場合、それを優先
         string defaultConfigPath = CheckFileExists(DefaultConfigFileName);
         if (defaultConfigPath != null)
         {
