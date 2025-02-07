@@ -9,8 +9,7 @@ public class Program
 {
     static string GetConfigFileName(string filePath)
     {
-        const string DefaultConfigFileName = "config.yml";
-        const string LegacyConfigFileName = "conf.yml";
+        const string ConfigFileName = "conf.yml";
         string baseName = Path.GetFileNameWithoutExtension(filePath);
         string directory = Path.GetDirectoryName(filePath);
 
@@ -22,30 +21,17 @@ public class Program
         }
 
         // 渡された元のファイル名に基づいてカスタム設定ファイルを探す
-        string customConfigName = CheckFileExists($"{baseName}_config.yml");
+        string customConfigName = CheckFileExists($"{baseName}_conf.yml");
         if (customConfigName != null)
         {
             return customConfigName;
         }
 
-        customConfigName = CheckFileExists($"{baseName}_conf.yml");
-        if (customConfigName != null)
+        // conf.yml が存在する場合、それを返す
+        string configPath = CheckFileExists(ConfigFileName);
+        if (configPath != null)
         {
-            return customConfigName;
-        }
-
-        // config.ymlが存在する場合、それを優先
-        string defaultConfigPath = CheckFileExists(DefaultConfigFileName);
-        if (defaultConfigPath != null)
-        {
-            return defaultConfigPath;
-        }
-
-        // もしconfig.ymlが存在しない場合、conf.ymlを使用
-        string legacyConfigPath = CheckFileExists(LegacyConfigFileName);
-        if (legacyConfigPath != null)
-        {
-            return legacyConfigPath;
+            return configPath;
         }
 
         // どちらも存在しない場合は null を返す
