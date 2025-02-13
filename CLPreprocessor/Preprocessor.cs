@@ -120,15 +120,6 @@ public class Preprocessor
         public LineObject LineObj { get; set; }
     }
 
-    private string rootDirectory;
-    private HashSet<string> defines = new HashSet<string>();
-    private Stack<State> states = new Stack<State>();
-
-    public Preprocessor(string rootDirectory)
-    {
-        this.rootDirectory = rootDirectory;
-    }
-
     public class ParseException : Exception
     {
         public LineObject LineObj { get; }
@@ -137,6 +128,15 @@ public class Preprocessor
         {
             LineObj = lineObj;
         }
+    }
+
+    private string rootDirectory;
+    private HashSet<string> defines = new HashSet<string>();
+    private Stack<State> states = new Stack<State>();
+
+    public Preprocessor(string rootDirectory)
+    {
+        this.rootDirectory = rootDirectory;
     }
 
 #if false
@@ -444,12 +444,54 @@ public class Preprocessor
         throw new ParseException(errorMessage, lineObj);
     }
 
+    private string ResolveIncludeFilePath(string includePath, string currentProjectDirectoryFromRoot, string currentFilePathAbs)
+    {
+        string localPath;
+        string projectDirectoryFromRoot;
+
+        var includeMatch = Regex.Match(includePath, @"^((\/)?([^:]+):)?(\.\/)?(.+)$");
+
+        if (!includeMatch.Success)
+        {
+            throw new ArgumentException("Invalid include path.");
+        }
+
+        localPath = includeMatch.Groups[5].Value;
+        projectDirectoryFromRoot = includeMatch.Groups[3].Value;
+        bool relativeFromCurrent = !string.IsNullOrEmpty(includeMatch.Groups[4].Value);
+
+        if (relativeFromCurrent)
+        {
+            if (!string.IsNullOrEmpty(projectDirectoryFromRoot))
+            {
+                throw new ArgumentException("Cannot use relative path with external reference.");
+            }
+            string currentFileDirectoryAbs = Path.GetDirectoryName(currentFilePathAbs);
+            return Path.Combine(currentFileDirectoryAbs, localPath);
+        }
+
+        if (string.IsNullOrEmpty(projectDirectoryFromRoot))
+        {
+            projectDirectoryFromRoot = currentProjectDirectoryFromRoot;
+        }
+        else
+        {
+            bool fromRoot = !string.IsNullOrEmpty(includeMatch.Groups[2].Value);
+            if (!fromRoot)
+            {
+                // TODO: Implement include path search if not from root
+            }
+        }
+
+        return Path.Combine(rootDirectory, projectDirectoryFromRoot, "source", localPath);
+    }
+
     private List<LineObject> ParseInclude(string includeFileString, string includeOptionString, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> variables, LineObject lineObj)
     {
         List<LineObject> includeLines = new List<LineObject>();
 
         // インクルードするファイルのパスを解決
-        string includeFilePath = Path.Combine(currentProjectDirectoryFromRoot, includeFileString);
+        string includeFilePath = ResolveIncludeFilePath(includeFileString, currentProjectDirectoryFromRoot, filePathAbs);
         if (!File.Exists(includeFilePath))
         {
             throw new ParseException($"Include file not found: {includeFilePath}", lineObj);
