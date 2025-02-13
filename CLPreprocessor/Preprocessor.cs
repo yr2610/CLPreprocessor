@@ -486,6 +486,7 @@ public class Preprocessor
         return Path.Combine(rootDirectory, projectDirectoryFromRoot, "source", localPath);
     }
 
+#if false
     private List<LineObject> ParseInclude(string includeFileString, string includeOptionString, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> variables, LineObject lineObj)
     {
         List<LineObject> includeLines = new List<LineObject>();
@@ -580,6 +581,7 @@ public class Preprocessor
             throw; // 再スロー
         }
     }
+#endif
 
     public List<LineObject> PreProcessConditionalCompile(List<LineObject> lines, HashSet<string> defines, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> templateVariables)
     {
@@ -634,4 +636,125 @@ public class Preprocessor
             throw;
         }
     }
+
+    private List<LineObject> ParseOneLineComment(List<LineObject> srcLines)
+    {
+        var lines = new List<LineObject>();
+        foreach (var lineObj in srcLines)
+        {
+            var line = lineObj.Lines[0];
+            int cppCommentIndex = line.IndexOf("//");
+            if (cppCommentIndex != -1)
+            {
+                if (cppCommentIndex == 0) continue; // 全行コメント
+                lineObj.Lines[0] = line.Substring(0, cppCommentIndex).TrimEnd();
+            }
+            lines.Add(lineObj);
+        }
+        return lines;
+    }
+
+    private List<LineObject> ParseMultilineComment(List<LineObject> srcLines)
+    {
+        var lines = new List<LineObject>();
+        var commentDepth = 0;
+
+        foreach (var lineObj in srcLines)
+        {
+            var line = lineObj.Lines[0];
+
+            if (line.Contains("/*") && !line.Contains("*/"))
+            {
+                commentDepth++;
+            }
+            else if (line.Contains("/*") && line.Contains("*/"))
+            {
+                // 一行で開いて閉じる場合
+                if (line.IndexOf("/*") < line.IndexOf("*/"))
+                {
+                    continue; // この行はコメントとして無視
+                }
+            }
+            else if (line.Contains("*/"))
+            {
+                commentDepth--;
+            }
+            else if (commentDepth > 0)
+            {
+                continue;
+            }
+
+            if (commentDepth == 0)
+            {
+                lines.Add(lineObj);
+            }
+        }
+
+        return lines;
+    }
+
+    private List<LineObject> PreProcessRecurse(string filePath, HashSet<string> defines, string currentProjectDirectoryFromRoot, Dictionary<string, string> templateVariables)
+    {
+        string filePathAbs = Path.GetFullPath(filePath);
+        string[] lines = File.ReadAllLines(filePathAbs, Encoding.UTF8);
+        var processed = new List<LineObject>();
+
+        // LineObjectの初期化
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var group = new LineObject
+            {
+                StartLineNumber = i + 1,
+                EndLineNumber = i + 1,
+                OriginalStartLineNumber = i + 1,
+                OriginalFilePath = filePath,
+                Lines = new List<string> { lines[i] }
+            };
+
+            processed.Add(group);
+        }
+
+        // コメント処理
+        processed = ParseOneLineComment(processed);
+        processed = ParseMultilineComment(processed);
+
+        // 条件付きコンパイルとインクルードの処理
+        try
+        {
+            var conditionallyCompiled = PreProcessConditionalCompile(processed, defines, currentProjectDirectoryFromRoot, filePathAbs, templateVariables);
+            return conditionallyCompiled;
+        }
+        catch (ParseException e)
+        {
+            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.StartLineNumber} in file {e.LineObj.OriginalFilePath}");
+            throw; // 再スロー
+        }
+    }
+
+    private List<LineObject> ParseInclude(string includeFileString, string includeOptionString, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> variables, LineObject lineObj)
+    {
+        List<LineObject> includeLines = new List<LineObject>();
+
+        // インクルードするファイルのパスを解決
+        string includeFilePath = Path.Combine(currentProjectDirectoryFromRoot, includeFileString);
+        if (!File.Exists(includeFilePath))
+        {
+            throw new ParseException($"Include file not found: {includeFilePath}", lineObj);
+        }
+
+        // インクルードファイルの前処理を再帰的に行う
+        var localDefines = new HashSet<string>(defines);
+        var localVariables = new Dictionary<string, string>(variables); // インクルードファイルに渡す変数
+        includeLines = PreProcessRecurse(includeFilePath, localDefines, Path.GetDirectoryName(includeFilePath), localVariables);
+
+        return includeLines;
+    }
+
+    public List<LineObject> PreProcess(string filePath, HashSet<string> defines)
+    {
+        var templateVariables = new Dictionary<string, string>();
+        string currentProjectDirectoryFromRoot = Path.GetDirectoryName(filePath);
+        return PreProcessRecurse(filePath, defines, currentProjectDirectoryFromRoot, templateVariables);
+    }
+
 }
