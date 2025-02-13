@@ -61,12 +61,18 @@ public class Program
             .Build();
         var yaml = serializer.Serialize(config);
 
+        if (!config.TryGetValue("$rootDirectory", out var rootDirectory))
+        {
+            Console.WriteLine("$rootDirectory が設定ファイルに存在しません。");
+            return;
+        }
+
         try
         {
             // XXX: 外から渡せるように
             HashSet<string> defines = new HashSet<string>(); 
 
-            var preprocessor = new Preprocessor();
+            var preprocessor = new Preprocessor(rootDirectory.ToString());
             var processedLines = preprocessor.PreProcess(filePath, defines);
 
             // 出力ファイル名に接尾辞を追加

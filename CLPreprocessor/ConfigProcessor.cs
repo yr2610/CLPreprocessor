@@ -85,7 +85,7 @@ public class ConfigProcessor
         _engine.Execute(script);
     }
 
-    public dynamic ReadConfigFile(string confFileName)
+    public IDictionary<string, object> ReadConfigFile(string confFileName)
     {
         var data = ReadYamlFile(confFileName);
 

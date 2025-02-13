@@ -120,8 +120,14 @@ public class Preprocessor
         public LineObject LineObj { get; set; }
     }
 
+    private string rootDirectory;
     private HashSet<string> defines = new HashSet<string>();
     private Stack<State> states = new Stack<State>();
+
+    public Preprocessor(string rootDirectory)
+    {
+        this.rootDirectory = rootDirectory;
+    }
 
     public class ParseException : Exception
     {
