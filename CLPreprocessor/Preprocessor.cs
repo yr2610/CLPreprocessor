@@ -130,6 +130,7 @@ public class Preprocessor
         }
     }
 
+    PathHelper pathHelper;
     private string rootDirectory;
     private HashSet<string> defines = new HashSet<string>();
     private Stack<State> states = new Stack<State>();
@@ -137,6 +138,7 @@ public class Preprocessor
     public Preprocessor(string rootDirectory)
     {
         this.rootDirectory = rootDirectory;
+        pathHelper = new PathHelper(rootDirectory);
     }
 
 #if false
@@ -737,6 +739,7 @@ public class Preprocessor
 
         // インクルードするファイルのパスを解決
         string includeFilePath = Path.Combine(currentProjectDirectoryFromRoot, includeFileString);
+        //string includeFilePath = ResolveIncludeFilePath(includeFileString, currentProjectDirectoryFromRoot, filePathAbs);
         if (!File.Exists(includeFilePath))
         {
             throw new ParseException($"Include file not found: {includeFilePath}", lineObj);
@@ -754,7 +757,76 @@ public class Preprocessor
     {
         var templateVariables = new Dictionary<string, string>();
         string currentProjectDirectoryFromRoot = Path.GetDirectoryName(filePath);
+        currentProjectDirectoryFromRoot = PathUtils.GetRelativePath(rootDirectory, currentProjectDirectoryFromRoot);
         return PreProcessRecurse(filePath, defines, currentProjectDirectoryFromRoot, templateVariables);
     }
 
+}
+
+public class PathHelper
+{
+    private string rootDirectory;
+    public string SourceDirectoryName { get; set; } = "source"; // デフォルト値を設定
+    public string BackupDirectoryName { get; set; } = "bak"; // デフォルト値を設定
+
+    public PathHelper(string rootDirectory)
+    {
+        this.rootDirectory = rootDirectory;
+    }
+
+    public string GetAbsoluteProjectPath(string projectPathFromRoot)
+    {
+        return Path.Combine(rootDirectory, projectPathFromRoot);
+    }
+
+    public string GetAbsoluteDirectory(string projectPathFromRoot, string directoryName = null)
+    {
+        var projectPathAbs = GetAbsoluteProjectPath(projectPathFromRoot);
+
+        if (string.IsNullOrEmpty(directoryName))
+        {
+            return projectPathAbs;
+        }
+
+        return Path.Combine(projectPathAbs, directoryName);
+    }
+
+    public string GetAbsoluteSourceDirectory(string projectPathFromRoot)
+    {
+        return GetAbsoluteDirectory(projectPathFromRoot, SourceDirectoryName);
+    }
+
+    public string DirectoryLocalPathToAbsolutePath(string filePathProjectLocal, string projectPathFromRoot, string directoryName)
+    {
+        var directoryAbs = GetAbsoluteDirectory(projectPathFromRoot, directoryName);
+        return Path.Combine(directoryAbs, filePathProjectLocal);
+    }
+
+    public string SourceLocalPathToAbsolutePath(string filePathProjectLocal, string projectPathFromRoot)
+    {
+        return DirectoryLocalPathToAbsolutePath(filePathProjectLocal, projectPathFromRoot, SourceDirectoryName);
+    }
+
+    public string AbsolutePathToDirectoryLocalPath(string filePath, string projectPathFromRoot, string directoryName)
+    {
+        var directoryAbs = GetAbsoluteDirectory(projectPathFromRoot, directoryName);
+        return PathUtils.GetRelativePath(directoryAbs, filePath);
+    }
+
+    public string AbsolutePathToSourceLocalPath(string filePath, string projectPathFromRoot)
+    {
+        return AbsolutePathToDirectoryLocalPath(filePath, projectPathFromRoot, SourceDirectoryName);
+    }
+
+    public string GetAbsoluteBackupDirectory(string projectPathFromRoot)
+    {
+        var projectPathAbs = GetAbsoluteProjectPath(projectPathFromRoot);
+        return Path.Combine(projectPathAbs, BackupDirectoryName);
+    }
+
+    public string GetAbsoluteBackupPath(string filePathProjectLocal, string projectPathFromRoot)
+    {
+        var backupDirectoryAbs = GetAbsoluteBackupDirectory(projectPathFromRoot);
+        return Path.Combine(backupDirectoryAbs, filePathProjectLocal);
+    }
 }
