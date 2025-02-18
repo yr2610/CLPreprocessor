@@ -13,6 +13,7 @@ public class LineObject
     public List<string> Lines { get; set; }
     public int OriginalStartLineNumber { get; set; }
     public string OriginalFilePath { get; set; }
+    public string ProjectDirectory { get; set; }
 }
 
 public class FormulaParser
@@ -697,7 +698,8 @@ public class Preprocessor
 
     private List<LineObject> PreProcessRecurse(string filePath, HashSet<string> defines, string currentProjectDirectoryFromRoot, Dictionary<string, string> templateVariables)
     {
-        string filePathAbs = Path.GetFullPath(filePath);
+        string filePathAbs = pathHelper.SourceLocalPathToAbsolutePath(filePath, currentProjectDirectoryFromRoot);
+
         string[] lines = File.ReadAllLines(filePathAbs, Encoding.UTF8);
         var processed = new List<LineObject>();
 
@@ -710,7 +712,8 @@ public class Preprocessor
                 EndLineNumber = i + 1,
                 OriginalStartLineNumber = i + 1,
                 OriginalFilePath = filePath,
-                Lines = new List<string> { lines[i] }
+                Lines = new List<string> { lines[i] },
+                ProjectDirectory = currentProjectDirectoryFromRoot,
             };
 
             processed.Add(group);
@@ -753,11 +756,15 @@ public class Preprocessor
         return includeLines;
     }
 
-    public List<LineObject> PreProcess(string filePath, HashSet<string> defines)
+    public List<LineObject> PreProcess(string filePathAbs, HashSet<string> defines)
     {
         var templateVariables = new Dictionary<string, string>();
-        string currentProjectDirectoryFromRoot = Path.GetDirectoryName(filePath);
-        currentProjectDirectoryFromRoot = PathUtils.GetRelativePath(rootDirectory, currentProjectDirectoryFromRoot);
+
+        // メインソースファイルのフォルダを現在のプロジェクトフォルダとする
+        string entryProject = Path.GetDirectoryName(filePathAbs);
+        string currentProjectDirectoryFromRoot = PathUtils.GetRelativePath(rootDirectory, entryProject);
+        var filePath = pathHelper.AbsolutePathToSourceLocalPath(filePathAbs, currentProjectDirectoryFromRoot);
+
         return PreProcessRecurse(filePath, defines, currentProjectDirectoryFromRoot, templateVariables);
     }
 
