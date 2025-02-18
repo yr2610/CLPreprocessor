@@ -762,6 +762,7 @@ public class Preprocessor
 
         // メインソースファイルのフォルダを現在のプロジェクトフォルダとする
         string entryProject = Path.GetDirectoryName(filePathAbs);
+        //string currentProjectDirectoryFromRoot = PathEx.GetRelativePath(rootDirectory, entryProject);
         string currentProjectDirectoryFromRoot = PathUtils.GetRelativePath(rootDirectory, entryProject);
         var filePath = pathHelper.AbsolutePathToSourceLocalPath(filePathAbs, currentProjectDirectoryFromRoot);
 
