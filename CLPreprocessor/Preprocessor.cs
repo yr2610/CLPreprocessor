@@ -447,13 +447,45 @@ public class Preprocessor
         throw new ParseException(errorMessage, lineObj);
     }
 
-    private string ResolveIncludeFilePath(string includePath, string currentProjectDirectoryFromRoot, string currentFilePathAbs)
+    static string ReplaceText(string s, Dictionary<string, string> data)
     {
+        return Regex.Replace(s, @"\{\{\=\s*([\w\$]+)\s*\}\}", match =>
+        {
+            string key = match.Groups[1].Value;
+            if (!data.ContainsKey(key))
+            {
+                throw new KeyNotFoundException(key);
+            }
+            return data[key];
+        });
+    }
+
+    public class IncludeFilePathError : Exception
+    {
+        public IncludeFilePathError(string message) : base(message) { }
+    }
+
+    // filename.txt とだけ指定した場合は現在のプロジェクトの source 直下
+    // projectname:filename.txt と指定すると外部プロジェクトの source 直下
+    // 外部プロジェクトは root を最優先で検索。次に include path から検索（未対応）
+    // プロジェクト指定なしの場合 ./filename.txt と指定するとそのファイルからの相対
+    private (string ProjectDirectory, string FilePath) ResolveIncludeFilePath(string includePath, string currentProjectDirectoryFromRoot, string currentFilePathAbs, Dictionary<string, string> variables)
+    {
+        try
+        {
+            includePath = ReplaceText(includePath, variables);
+        }
+        catch (KeyNotFoundException e)
+        {
+            Console.WriteLine($"Error: '{e.Message}' を置換できません");
+        }
+
         string localPath;
         string projectDirectoryFromRoot;
 
         var includeMatch = Regex.Match(includePath, @"^((\/)?([^:]+):)?(\.\/)?(.+)$");
 
+        // 無効なパス指定
         if (!includeMatch.Success)
         {
             throw new ArgumentException("Invalid include path.");
@@ -461,6 +493,8 @@ public class Preprocessor
 
         localPath = includeMatch.Groups[5].Value;
         projectDirectoryFromRoot = includeMatch.Groups[3].Value;
+
+        // 現在のファイル(include元)からの相対指定
         bool relativeFromCurrent = !string.IsNullOrEmpty(includeMatch.Groups[4].Value);
 
         if (relativeFromCurrent)
@@ -470,15 +504,19 @@ public class Preprocessor
                 throw new ArgumentException("Cannot use relative path with external reference.");
             }
             string currentFileDirectoryAbs = Path.GetDirectoryName(currentFilePathAbs);
-            return Path.Combine(currentFileDirectoryAbs, localPath);
+            string filePath = pathHelper.AbsolutePathToSourceLocalPath(currentFileDirectoryAbs, currentProjectDirectoryFromRoot);
+
+            return (currentProjectDirectoryFromRoot, filePath);
         }
 
+        // XXX: 当面は root 以下専用
         if (string.IsNullOrEmpty(projectDirectoryFromRoot))
         {
             projectDirectoryFromRoot = currentProjectDirectoryFromRoot;
         }
         else
         {
+            // root 指定の有無に関係なく root を優先して読む
             bool fromRoot = !string.IsNullOrEmpty(includeMatch.Groups[2].Value);
             if (!fromRoot)
             {
@@ -486,8 +524,9 @@ public class Preprocessor
             }
         }
 
-        return Path.Combine(rootDirectory, projectDirectoryFromRoot, "source", localPath);
+        return (projectDirectoryFromRoot, localPath);
     }
+
 
 #if false
     private List<LineObject> ParseInclude(string includeFileString, string includeOptionString, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> variables, LineObject lineObj)
@@ -741,8 +780,9 @@ public class Preprocessor
         List<LineObject> includeLines = new List<LineObject>();
 
         // インクルードするファイルのパスを解決
+        var includeFileInfo = ResolveIncludeFilePath(includeFileString, currentProjectDirectoryFromRoot, filePathAbs, variables);
+
         string includeFilePath = Path.Combine(currentProjectDirectoryFromRoot, includeFileString);
-        //string includeFilePath = ResolveIncludeFilePath(includeFileString, currentProjectDirectoryFromRoot, filePathAbs);
         if (!File.Exists(includeFilePath))
         {
             throw new ParseException($"Include file not found: {includeFilePath}", lineObj);
