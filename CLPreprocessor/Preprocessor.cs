@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 
@@ -123,11 +124,11 @@ public class Preprocessor
 
     public class ParseException : Exception
     {
-        public LineObject LineObj { get; }
+        public LineObject LineObj { get; set; }
 
-        public ParseException(string message, LineObject lineObj) : base(message)
+        public ParseException(string message, LineObject lineObject, Exception innerException = null) : base(message, innerException)
         {
-            LineObj = lineObj;
+            LineObj = lineObject;
         }
     }
 
@@ -465,6 +466,11 @@ public class Preprocessor
         public IncludeFilePathError(string message) : base(message) { }
     }
 
+    public class VariableNotFoundException : Exception // 変数が見つからない例外
+    {
+        public VariableNotFoundException(string message, Exception innerException = null) : base(message, innerException) { }
+    }
+
     // filename.txt とだけ指定した場合は現在のプロジェクトの source 直下
     // projectname:filename.txt と指定すると外部プロジェクトの source 直下
     // 外部プロジェクトは root を最優先で検索。次に include path から検索（未対応）
@@ -477,7 +483,7 @@ public class Preprocessor
         }
         catch (KeyNotFoundException e)
         {
-            Console.WriteLine($"Error: '{e.Message}' を置換できません");
+            throw new VariableNotFoundException($"'{e.Message}' を置換できません", e);
         }
 
         string localPath;
@@ -775,25 +781,54 @@ public class Preprocessor
         }
     }
 
+    private Dictionary<string, string> ParseIncludeParameters(string s, Dictionary<string, string> variables)
+    {
+        if (string.IsNullOrEmpty(s))
+        {
+            return new Dictionary<string, string>();
+        }
+
+        try
+        {
+            s = ReplaceText(s, variables); // テンプレート処理を先に行う
+
+            // System.Text.Json を使って JSON 文字列を Dictionary<string, string> に変換
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true }; // プロパティ名の大文字小文字を区別しない
+            var paramsObj = JsonSerializer.Deserialize<Dictionary<string, string>>(s, options);
+
+            return paramsObj ?? new Dictionary<string, string>(); // null の可能性があるため、null合体演算子で空の Dictionary を返すようにする
+        }
+        catch (JsonException e)
+        {
+            throw new ParseException("Include パラメータが不正です。", null, e); // lineObj が利用できない場合は null を渡す
+        }
+    }
+
     private List<LineObject> ParseInclude(string includeFileString, string includeOptionString, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> variables, LineObject lineObj)
     {
         List<LineObject> includeLines = new List<LineObject>();
 
         // インクルードするファイルのパスを解決
         var includeFileInfo = ResolveIncludeFilePath(includeFileString, currentProjectDirectoryFromRoot, filePathAbs, variables);
+        var includeParam = ParseIncludeParameters(includeOptionString, variables);
 
-        string includeFilePath = Path.Combine(currentProjectDirectoryFromRoot, includeFileString);
-        if (!File.Exists(includeFilePath))
+        var localTemplateVariables = new Dictionary<string, string>(variables);
+        foreach (var kvp in includeParam)
         {
-            throw new ParseException($"Include file not found: {includeFilePath}", lineObj);
+            localTemplateVariables[kvp.Key] = kvp.Value;
+        }
+        localTemplateVariables["$currentProjectDirectory"] = currentProjectDirectoryFromRoot;
+
+        var path = includeFileInfo.FilePath;
+        var pathAbs = pathHelper.SourceLocalPathToAbsolutePath(path, includeFileInfo.ProjectDirectory);
+
+        if (!File.Exists(pathAbs))
+        {
+            var sourceDirectory = Path.Combine(includeFileInfo.ProjectDirectory, pathHelper.SourceDirectoryName);
+            throw new ParseException($"フォルダ\n{sourceDirectory}\nには\nファイル\n{path}\nが存在しません", lineObj);
         }
 
-        // インクルードファイルの前処理を再帰的に行う
-        var localDefines = new HashSet<string>(defines);
-        var localVariables = new Dictionary<string, string>(variables); // インクルードファイルに渡す変数
-        includeLines = PreProcessRecurse(includeFilePath, localDefines, Path.GetDirectoryName(includeFilePath), localVariables);
-
-        return includeLines;
+        return PreProcessRecurse(pathAbs, defines, includeFileInfo.ProjectDirectory, localTemplateVariables);
     }
 
     public List<LineObject> PreProcess(string filePathAbs, HashSet<string> defines)
