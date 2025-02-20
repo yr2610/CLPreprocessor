@@ -40,7 +40,7 @@ public class FormulaParser
     private List<string> Tokenize(string formula)
     {
         // スペースを除去しつつトークン化
-        var tokenRegex = new Regex(@"(?<=\s|^)(true|false|[a-zA-Z_]\w*|\|\||&&|!|\(|\))(?=\s|$)");
+        var tokenRegex = new Regex(@"(true|false|[a-zA-Z_]\w*|\|\||&&|!|\(|\))");
         return tokenRegex.Matches(formula).Cast<Match>().Select(m => m.Value).ToList();
     }
 
@@ -56,7 +56,8 @@ public class FormulaParser
         while (position < tokens.Count && tokens[position] == "||")
         {
             position++;
-            result = result || ParseAnd();
+            bool right = ParseAnd(); // ParseAndを必ず実行する（短絡評価回避）
+            result = result || right;
         }
         return result;
     }
@@ -67,7 +68,8 @@ public class FormulaParser
         while (position < tokens.Count && tokens[position] == "&&")
         {
             position++;
-            result = result && ParseNot();
+            bool right = ParseNot(); // ParseNotを必ず実行する（短絡評価回避）
+            result = result && right;
         }
         return result;
     }
@@ -696,6 +698,7 @@ public class Preprocessor
             {
                 if (cppCommentIndex == 0) continue; // 全行コメント
                 lineObj.Lines[0] = line.Substring(0, cppCommentIndex).TrimEnd();
+                if (string.IsNullOrWhiteSpace(lineObj.Lines[0])) continue; // 全行コメント
             }
             lines.Add(lineObj);
         }
@@ -751,6 +754,11 @@ public class Preprocessor
         // LineObjectの初期化
         for (int i = 0; i < lines.Length; i++)
         {
+            if (string.IsNullOrWhiteSpace(lines[i]))
+            {
+                continue;
+            }
+
             var group = new LineObject
             {
                 StartLineNumber = i + 1,
