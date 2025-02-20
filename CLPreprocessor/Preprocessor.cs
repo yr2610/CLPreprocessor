@@ -747,6 +747,9 @@ public class Preprocessor
     private List<LineObject> PreProcessRecurse(string filePath, HashSet<string> defines, string currentProjectDirectoryFromRoot, Dictionary<string, string> templateVariables)
     {
         string filePathAbs = pathHelper.SourceLocalPathToAbsolutePath(filePath, currentProjectDirectoryFromRoot);
+        //string originalFilePathProjectLocal = PathUtils.GetRelativePath(currentProjectDirectoryFromRoot, filePath);
+        string projectPathAbs = pathHelper.GetAbsoluteProjectPath(currentProjectDirectoryFromRoot);
+        string originalFilePathProjectLocal = PathUtils.GetRelativePath(projectPathAbs, filePathAbs);
 
         string[] lines = File.ReadAllLines(filePathAbs, Encoding.UTF8);
         var processed = new List<LineObject>();
@@ -764,7 +767,7 @@ public class Preprocessor
                 StartLineNumber = i + 1,
                 EndLineNumber = i + 1,
                 OriginalStartLineNumber = i + 1,
-                OriginalFilePath = filePath,
+                OriginalFilePath = originalFilePathProjectLocal,
                 Lines = new List<string> { lines[i] },
                 ProjectDirectory = currentProjectDirectoryFromRoot,
             };
@@ -815,6 +818,8 @@ public class Preprocessor
     private List<LineObject> ParseInclude(string includeFileString, string includeOptionString, string currentProjectDirectoryFromRoot, string filePathAbs, Dictionary<string, string> variables, LineObject lineObj)
     {
         List<LineObject> includeLines = new List<LineObject>();
+
+        includeFileString = PathUtils.ReplaceAltSeparator(includeFileString);
 
         // インクルードするファイルのパスを解決
         var includeFileInfo = ResolveIncludeFilePath(includeFileString, currentProjectDirectoryFromRoot, filePathAbs, variables);
