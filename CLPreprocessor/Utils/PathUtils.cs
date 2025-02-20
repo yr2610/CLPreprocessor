@@ -7,6 +7,36 @@ using System.IO;
 
 public class PathUtils
 {
+
+    // 代替区切り文字を標準区切り文字に置換
+    public static string ReplaceAltSeparator(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return path;
+        }
+
+        return path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+    }
+
+    // 連続する区切り文字を削除
+    public static string RemoveRedundantSeparators(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return path;
+        }
+
+        char directorySeparatorChar = Path.DirectorySeparatorChar;
+
+        while (path.Contains($"{directorySeparatorChar}{directorySeparatorChar}"))
+        {
+            path = path.Replace($"{directorySeparatorChar}{directorySeparatorChar}", directorySeparatorChar.ToString());
+        }
+
+        return path;
+    }
+
     public static string GetRelativePath(string fromPath, string toPath)
     {
         // 現在の作業ディレクトリ
@@ -40,7 +70,7 @@ public class PathUtils
         string relativePath = Uri.UnescapeDataString(relativeUri.ToString());
 
         //"/"を"\"に変換する
-        relativePath = relativePath.Replace('/', '\\');
+        relativePath = relativePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 
         // ディレクトリを示す場合は末尾にディレクトリセパレータを付ける
         //if (Directory.Exists(fullToPath) && !relativePath.EndsWith(Path.DirectorySeparatorChar.ToString()))
