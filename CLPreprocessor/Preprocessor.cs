@@ -12,7 +12,7 @@ public class LineObject
     public string ProjectDirectory { get; set; }
     public string FilePath { get; set; }
     public int StartLineNumber { get; set; }
-    public List<string> Lines { get; set; }
+    public string Line { get; set; }
 }
 
 public class LineInfo
@@ -664,7 +664,7 @@ public class Preprocessor
         {
             foreach (var lineObj in lines)
             {
-                var line = lineObj.Lines[0];
+                var line = lineObj.Line;
 
                 var commandMatch = Regex.Match(line, @"^@([a-zA-Z]+)(\s+(.+))?$");
                 if (commandMatch.Success)
@@ -708,13 +708,13 @@ public class Preprocessor
         var lines = new List<LineObject>();
         foreach (var lineObj in srcLines)
         {
-            var line = lineObj.Lines[0];
+            var line = lineObj.Line;
             int cppCommentIndex = line.IndexOf("//");
             if (cppCommentIndex != -1)
             {
                 if (cppCommentIndex == 0) continue; // 全行コメント
-                lineObj.Lines[0] = line.Substring(0, cppCommentIndex).TrimEnd();
-                if (string.IsNullOrWhiteSpace(lineObj.Lines[0])) continue; // 全行コメント
+                lineObj.Line = line.Substring(0, cppCommentIndex).TrimEnd();
+                if (string.IsNullOrWhiteSpace(lineObj.Line)) continue; // 全行コメント
             }
             lines.Add(lineObj);
         }
@@ -728,7 +728,7 @@ public class Preprocessor
 
         foreach (var lineObj in srcLines)
         {
-            var line = lineObj.Lines[0];
+            var line = lineObj.Line;
 
             if (line.Contains("/*") && !line.Contains("*/"))
             {
@@ -783,7 +783,7 @@ public class Preprocessor
                 ProjectDirectory = currentProjectDirectoryFromRoot,
                 FilePath = originalFilePathProjectLocal,
                 StartLineNumber = i + 1,
-                Lines = new List<string> { lines[i] },
+                Line = lines[i],
             };
 
             processed.Add(group);
@@ -858,35 +858,6 @@ public class Preprocessor
         return PreProcessRecurse(pathAbs, defines, includeFileInfo.ProjectDirectory, localTemplateVariables);
     }
 
-    public static List<LineObject> MergeLineObjects(List<LineObject> lineObjects)
-    {
-        if (lineObjects == null || lineObjects.Count == 0)
-            return new List<LineObject>();
-
-        var mergedList = new List<LineObject>();
-        LineObject current = lineObjects[0];
-
-        for (int i = 1; i < lineObjects.Count; i++)
-        {
-            var next = lineObjects[i];
-
-            if (current.ProjectDirectory == next.ProjectDirectory &&
-                current.FilePath == next.FilePath &&
-                current.StartLineNumber + current.Lines.Count == next.StartLineNumber)
-            {
-                current.Lines.AddRange(next.Lines);
-            }
-            else
-            {
-                mergedList.Add(current);
-                current = next;
-            }
-        }
-
-        mergedList.Add(current);
-        return mergedList;
-    }
-
     public List<LineInfo> ConvertToLineInfoList(List<LineObject> lineObjects)
     {
         var lineInfoList = new List<LineInfo>();
@@ -909,14 +880,14 @@ public class Preprocessor
                 currentDetail = new LineInfo.LineDetail
                 {
                     StartLineNumber = lineObject.StartLineNumber,
-                    Lines = new List<string>(lineObject.Lines)
+                    Lines = new List<string> { lineObject.Line },
                 };
                 currentLineInfo.LineDetails.Add(currentDetail);
             }
             else if (currentDetail.StartLineNumber + currentDetail.Lines.Count == lineObject.StartLineNumber)
             {
                 // 連続する行番号の場合、現在の LineDetail に追加
-                currentDetail.Lines.AddRange(lineObject.Lines);
+                currentDetail.Lines.Add(lineObject.Line);
             }
             else
             {
@@ -924,7 +895,7 @@ public class Preprocessor
                 currentDetail = new LineInfo.LineDetail
                 {
                     StartLineNumber = lineObject.StartLineNumber,
-                    Lines = new List<string>(lineObject.Lines)
+                    Lines = new List<string> { lineObject.Line },
                 };
                 currentLineInfo.LineDetails.Add(currentDetail);
             }
