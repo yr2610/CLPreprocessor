@@ -9,12 +9,34 @@ using System.Text.RegularExpressions;
 
 public class LineObject
 {
-    public int StartLineNumber { get; set; }
-    public int EndLineNumber { get; set; }
-    public List<string> Lines { get; set; }
-    public int OriginalStartLineNumber { get; set; }
-    public string OriginalFilePath { get; set; }
     public string ProjectDirectory { get; set; }
+    public string FilePath { get; set; }
+    public int StartLineNumber { get; set; }
+    public List<string> Lines { get; set; }
+}
+
+public class LineInfo
+{
+    public string ProjectDirectory { get; set; }
+    public string FilePath { get; set; }
+    public List<LineDetail> LineDetails { get; set; }
+
+    public LineInfo()
+    {
+        LineDetails = new List<LineDetail>();
+    }
+
+    // 本当は tuple にしたかったけど JSON に serialize できないので
+    public class LineDetail
+    {
+        public int StartLineNumber { get; set; }
+        public List<string> Lines { get; set; }
+
+        public LineDetail()
+        {
+            Lines = new List<string>();
+        }
+    }
 }
 
 public class FormulaParser
@@ -137,7 +159,7 @@ public class Preprocessor
     PathHelper pathHelper;
     private string rootDirectory;
     private HashSet<string> defines = new HashSet<string>();
-    private Stack<State> states = new Stack<State>();
+    private Stack<State> states;
 
     public Preprocessor(string rootDirectory)
     {
@@ -672,17 +694,11 @@ public class Preprocessor
                 dstLines.Add(lineObj);
             }
 
-            if (states.Count > 0)
-            {
-                var state = states.Peek();
-                throw new ParseException($"Unclosed @if statement at line {state.LineObj.StartLineNumber} in file {state.LineObj.OriginalFilePath}", state.LineObj);
-            }
-
             return dstLines;
         }
         catch (ParseException e)
         {
-            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.StartLineNumber} in file {e.LineObj.OriginalFilePath}");
+            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.StartLineNumber} in file {e.LineObj.FilePath}");
             throw;
         }
     }
@@ -764,12 +780,10 @@ public class Preprocessor
 
             var group = new LineObject
             {
-                StartLineNumber = i + 1,
-                EndLineNumber = i + 1,
-                OriginalStartLineNumber = i + 1,
-                OriginalFilePath = originalFilePathProjectLocal,
-                Lines = new List<string> { lines[i] },
                 ProjectDirectory = currentProjectDirectoryFromRoot,
+                FilePath = originalFilePathProjectLocal,
+                StartLineNumber = i + 1,
+                Lines = new List<string> { lines[i] },
             };
 
             processed.Add(group);
@@ -787,7 +801,7 @@ public class Preprocessor
         }
         catch (ParseException e)
         {
-            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.StartLineNumber} in file {e.LineObj.OriginalFilePath}");
+            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.StartLineNumber} in file {e.LineObj.FilePath}");
             throw; // 再スロー
         }
     }
@@ -844,7 +858,82 @@ public class Preprocessor
         return PreProcessRecurse(pathAbs, defines, includeFileInfo.ProjectDirectory, localTemplateVariables);
     }
 
-    public List<LineObject> PreProcess(string filePathAbs, HashSet<string> defines)
+    public static List<LineObject> MergeLineObjects(List<LineObject> lineObjects)
+    {
+        if (lineObjects == null || lineObjects.Count == 0)
+            return new List<LineObject>();
+
+        var mergedList = new List<LineObject>();
+        LineObject current = lineObjects[0];
+
+        for (int i = 1; i < lineObjects.Count; i++)
+        {
+            var next = lineObjects[i];
+
+            if (current.ProjectDirectory == next.ProjectDirectory &&
+                current.FilePath == next.FilePath &&
+                current.StartLineNumber + current.Lines.Count == next.StartLineNumber)
+            {
+                current.Lines.AddRange(next.Lines);
+            }
+            else
+            {
+                mergedList.Add(current);
+                current = next;
+            }
+        }
+
+        mergedList.Add(current);
+        return mergedList;
+    }
+
+    public List<LineInfo> ConvertToLineInfoList(List<LineObject> lineObjects)
+    {
+        var lineInfoList = new List<LineInfo>();
+        LineInfo currentLineInfo = null;
+        LineInfo.LineDetail currentDetail = null;
+
+        foreach (var lineObject in lineObjects)
+        {
+            if (currentLineInfo == null ||
+                currentLineInfo.ProjectDirectory != lineObject.ProjectDirectory ||
+                currentLineInfo.FilePath != lineObject.FilePath)
+            {
+                // 新しい LineInfo を作成
+                currentLineInfo = new LineInfo
+                {
+                    ProjectDirectory = lineObject.ProjectDirectory,
+                    FilePath = lineObject.FilePath
+                };
+                lineInfoList.Add(currentLineInfo);
+                currentDetail = new LineInfo.LineDetail
+                {
+                    StartLineNumber = lineObject.StartLineNumber,
+                    Lines = new List<string>(lineObject.Lines)
+                };
+                currentLineInfo.LineDetails.Add(currentDetail);
+            }
+            else if (currentDetail.StartLineNumber + currentDetail.Lines.Count == lineObject.StartLineNumber)
+            {
+                // 連続する行番号の場合、現在の LineDetail に追加
+                currentDetail.Lines.AddRange(lineObject.Lines);
+            }
+            else
+            {
+                // 新しい LineDetail を作成
+                currentDetail = new LineInfo.LineDetail
+                {
+                    StartLineNumber = lineObject.StartLineNumber,
+                    Lines = new List<string>(lineObject.Lines)
+                };
+                currentLineInfo.LineDetails.Add(currentDetail);
+            }
+        }
+
+        return lineInfoList;
+    }
+
+    public List<LineInfo> PreProcess(string filePathAbs, HashSet<string> defines)
     {
         var templateVariables = new Dictionary<string, string>();
 
@@ -854,7 +943,17 @@ public class Preprocessor
         string currentProjectDirectoryFromRoot = PathUtils.GetRelativePath(rootDirectory, entryProject);
         var filePath = pathHelper.AbsolutePathToSourceLocalPath(filePathAbs, currentProjectDirectoryFromRoot);
 
-        return PreProcessRecurse(filePath, defines, currentProjectDirectoryFromRoot, templateVariables);
+        states = new Stack<State>();
+
+        var lineObjects = PreProcessRecurse(filePath, defines, currentProjectDirectoryFromRoot, templateVariables);
+
+        if (states.Count > 0)
+        {
+            var state = states.Peek();
+            throw new ParseException($"Unclosed @if statement at line {state.LineObj.StartLineNumber} in file {state.LineObj.FilePath}", state.LineObj);
+        }
+
+        return ConvertToLineInfoList(lineObjects);
     }
 
 }
