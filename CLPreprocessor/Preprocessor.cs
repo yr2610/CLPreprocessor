@@ -39,6 +39,81 @@ public class LineInfo
     }
 }
 
+public static class LineConverter
+{
+    public static List<LineInfo> ConvertToLineInfoList(List<LineObject> lineObjects)
+    {
+        var lineInfoList = new List<LineInfo>();
+        LineInfo currentLineInfo = null;
+        LineInfo.LineDetail currentDetail = null;
+
+        foreach (var lineObject in lineObjects)
+        {
+            if (currentLineInfo == null ||
+                currentLineInfo.ProjectDirectory != lineObject.ProjectDirectory ||
+                currentLineInfo.FilePath != lineObject.FilePath)
+            {
+                // 新しい LineInfo を作成
+                currentLineInfo = new LineInfo
+                {
+                    ProjectDirectory = lineObject.ProjectDirectory,
+                    FilePath = lineObject.FilePath
+                };
+                lineInfoList.Add(currentLineInfo);
+                currentDetail = new LineInfo.LineDetail
+                {
+                    StartLineNumber = lineObject.StartLineNumber,
+                    Lines = new List<string> { lineObject.Line },
+                };
+                currentLineInfo.LineDetails.Add(currentDetail);
+            }
+            else if (currentDetail.StartLineNumber + currentDetail.Lines.Count == lineObject.StartLineNumber)
+            {
+                // 連続する行番号の場合、現在の LineDetail に追加
+                currentDetail.Lines.Add(lineObject.Line);
+            }
+            else
+            {
+                // 新しい LineDetail を作成
+                currentDetail = new LineInfo.LineDetail
+                {
+                    StartLineNumber = lineObject.StartLineNumber,
+                    Lines = new List<string> { lineObject.Line },
+                };
+                currentLineInfo.LineDetails.Add(currentDetail);
+            }
+        }
+
+        return lineInfoList;
+    }
+
+    public static List<LineObject> ConvertToLineObjectList(List<LineInfo> lineInfos)
+    {
+        var lineObjectList = new List<LineObject>();
+
+        foreach (var lineInfo in lineInfos)
+        {
+            foreach (var lineDetail in lineInfo.LineDetails)
+            {
+                int currentLineNumber = lineDetail.StartLineNumber;
+                foreach (var line in lineDetail.Lines)
+                {
+                    lineObjectList.Add(new LineObject
+                    {
+                        ProjectDirectory = lineInfo.ProjectDirectory,
+                        FilePath = lineInfo.FilePath,
+                        StartLineNumber = currentLineNumber,
+                        Line = line
+                    });
+                    currentLineNumber++;
+                }
+            }
+        }
+
+        return lineObjectList;
+    }
+}
+
 public class FormulaParser
 {
     private string formula;
@@ -858,52 +933,6 @@ public class Preprocessor
         return PreProcessRecurse(pathAbs, defines, includeFileInfo.ProjectDirectory, localTemplateVariables);
     }
 
-    public List<LineInfo> ConvertToLineInfoList(List<LineObject> lineObjects)
-    {
-        var lineInfoList = new List<LineInfo>();
-        LineInfo currentLineInfo = null;
-        LineInfo.LineDetail currentDetail = null;
-
-        foreach (var lineObject in lineObjects)
-        {
-            if (currentLineInfo == null ||
-                currentLineInfo.ProjectDirectory != lineObject.ProjectDirectory ||
-                currentLineInfo.FilePath != lineObject.FilePath)
-            {
-                // 新しい LineInfo を作成
-                currentLineInfo = new LineInfo
-                {
-                    ProjectDirectory = lineObject.ProjectDirectory,
-                    FilePath = lineObject.FilePath
-                };
-                lineInfoList.Add(currentLineInfo);
-                currentDetail = new LineInfo.LineDetail
-                {
-                    StartLineNumber = lineObject.StartLineNumber,
-                    Lines = new List<string> { lineObject.Line },
-                };
-                currentLineInfo.LineDetails.Add(currentDetail);
-            }
-            else if (currentDetail.StartLineNumber + currentDetail.Lines.Count == lineObject.StartLineNumber)
-            {
-                // 連続する行番号の場合、現在の LineDetail に追加
-                currentDetail.Lines.Add(lineObject.Line);
-            }
-            else
-            {
-                // 新しい LineDetail を作成
-                currentDetail = new LineInfo.LineDetail
-                {
-                    StartLineNumber = lineObject.StartLineNumber,
-                    Lines = new List<string> { lineObject.Line },
-                };
-                currentLineInfo.LineDetails.Add(currentDetail);
-            }
-        }
-
-        return lineInfoList;
-    }
-
     public List<LineInfo> PreProcess(string filePathAbs, HashSet<string> defines)
     {
         var templateVariables = new Dictionary<string, string>();
@@ -924,7 +953,7 @@ public class Preprocessor
             throw new ParseException($"Unclosed @if statement at line {state.LineObj.StartLineNumber} in file {state.LineObj.FilePath}", state.LineObj);
         }
 
-        return ConvertToLineInfoList(lineObjects);
+        return LineConverter.ConvertToLineInfoList(lineObjects);
     }
 
 }
