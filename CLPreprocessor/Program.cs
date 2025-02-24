@@ -75,13 +75,16 @@ public class Program
             var preprocessor = new Preprocessor(rootDirectory.ToString());
             var processedLines = preprocessor.PreProcess(filePath, defines);
 
+            Parser parser = new Parser();
+            parser.ParseLines(config, processedLines, filePath);
+
             // 出力ファイル名に接尾辞を追加
             string fileName = Path.GetFileNameWithoutExtension(filePath);
             string outputFileName = $"{fileName}_preprocessed.json";
             string outputPath = Path.Combine(Path.GetDirectoryName(filePath), outputFileName);
 
             // JSONに出力
-            var outputData = new { processedLines = processedLines };
+            var outputData = processedLines;
             var options = new JsonSerializerOptions
             {
                 WriteIndented = true,
