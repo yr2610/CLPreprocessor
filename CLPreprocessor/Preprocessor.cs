@@ -933,7 +933,7 @@ public class Preprocessor
         return PreProcessRecurse(pathAbs, defines, includeFileInfo.ProjectDirectory, localTemplateVariables);
     }
 
-    public List<LineInfo> PreProcess(string filePathAbs, HashSet<string> defines)
+    public List<LineObject> PreProcess(string filePathAbs, HashSet<string> defines)
     {
         var templateVariables = new Dictionary<string, string>();
 
@@ -953,7 +953,8 @@ public class Preprocessor
             throw new ParseException($"Unclosed @if statement at line {state.LineObj.StartLineNumber} in file {state.LineObj.FilePath}", state.LineObj);
         }
 
-        return LineConverter.ConvertToLineInfoList(lineObjects);
+        //return LineConverter.ConvertToLineInfoList(lineObjects);
+        return lineObjects;
     }
 
 }
