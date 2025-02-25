@@ -75,7 +75,7 @@ public class Program
             var preprocessor = new Preprocessor(rootDirectory.ToString());
             var processedLines = preprocessor.PreProcess(filePath, defines);
 
-            Parser parser = new Parser();
+            Parser parser = new Parser(rootDirectory.ToString());
             parser.ParseLines(config, processedLines, filePath);
 
             // 出力ファイル名に接尾辞を追加
