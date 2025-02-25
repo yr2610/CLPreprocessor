@@ -11,7 +11,7 @@ public class LineObject
 {
     public string ProjectDirectory { get; set; }
     public string FilePath { get; set; }
-    public int StartLineNumber { get; set; }
+    public int LineNumber { get; set; }
     public string Line { get; set; }
 }
 
@@ -62,12 +62,12 @@ public static class LineConverter
                 lineInfoList.Add(currentLineInfo);
                 currentDetail = new LineInfo.LineDetail
                 {
-                    StartLineNumber = lineObject.StartLineNumber,
+                    StartLineNumber = lineObject.LineNumber,
                     Lines = new List<string> { lineObject.Line },
                 };
                 currentLineInfo.LineDetails.Add(currentDetail);
             }
-            else if (currentDetail.StartLineNumber + currentDetail.Lines.Count == lineObject.StartLineNumber)
+            else if (currentDetail.StartLineNumber + currentDetail.Lines.Count == lineObject.LineNumber)
             {
                 // 連続する行番号の場合、現在の LineDetail に追加
                 currentDetail.Lines.Add(lineObject.Line);
@@ -77,7 +77,7 @@ public static class LineConverter
                 // 新しい LineDetail を作成
                 currentDetail = new LineInfo.LineDetail
                 {
-                    StartLineNumber = lineObject.StartLineNumber,
+                    StartLineNumber = lineObject.LineNumber,
                     Lines = new List<string> { lineObject.Line },
                 };
                 currentLineInfo.LineDetails.Add(currentDetail);
@@ -102,7 +102,7 @@ public static class LineConverter
                     {
                         ProjectDirectory = lineInfo.ProjectDirectory,
                         FilePath = lineInfo.FilePath,
-                        StartLineNumber = currentLineNumber,
+                        LineNumber = currentLineNumber,
                         Line = line
                     });
                     currentLineNumber++;
@@ -773,7 +773,7 @@ public class Preprocessor
         }
         catch (ParseException e)
         {
-            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.StartLineNumber} in file {e.LineObj.FilePath}");
+            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.LineNumber} in file {e.LineObj.FilePath}");
             throw;
         }
     }
@@ -857,7 +857,7 @@ public class Preprocessor
             {
                 ProjectDirectory = currentProjectDirectoryFromRoot,
                 FilePath = originalFilePathProjectLocal,
-                StartLineNumber = i + 1,
+                LineNumber = i + 1,
                 Line = lines[i],
             };
 
@@ -876,7 +876,7 @@ public class Preprocessor
         }
         catch (ParseException e)
         {
-            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.StartLineNumber} in file {e.LineObj.FilePath}");
+            Console.WriteLine($"Parse error: {e.Message} at line {e.LineObj.LineNumber} in file {e.LineObj.FilePath}");
             throw; // 再スロー
         }
     }
@@ -950,7 +950,7 @@ public class Preprocessor
         if (states.Count > 0)
         {
             var state = states.Peek();
-            throw new ParseException($"Unclosed @if statement at line {state.LineObj.StartLineNumber} in file {state.LineObj.FilePath}", state.LineObj);
+            throw new ParseException($"Unclosed @if statement at line {state.LineObj.LineNumber} in file {state.LineObj.FilePath}", state.LineObj);
         }
 
         //return LineConverter.ConvertToLineInfoList(lineObjects);

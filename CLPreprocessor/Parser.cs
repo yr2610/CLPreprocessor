@@ -100,7 +100,6 @@ public class ItemNode : Node
     public string Marker { get; set; }
     public int Group { get; set; }
     public int DepthInGroup { get; set; }
-    public string Text { get; set; }
     public List<string> TableData { get; set; }
     public string Comment { get; set; }
     public string ImageFilePath { get; set; }
@@ -119,7 +118,7 @@ public class NoIdNodeData
 
 public class ParseError : Exception
 {
-    public ParseError(string message, LineObject lineObj) : base($"{message} (File: {lineObj.FilePath}, Line: {lineObj.StartLineNumber})") { }
+    public ParseError(string message, LineObject lineObj) : base($"{message} (File: {lineObj.FilePath}, Line: {lineObj.LineNumber})") { }
 }
 
 public class Parser
@@ -292,8 +291,8 @@ public class Parser
                 {
                     LineObject uidInfo0 = uidListH1[uid];
                     string errorMessage = "ID '#" + uid + "' が重複しています";
-                    errorMessage += MakeLineinfoString(uidInfo0.FilePath, uidInfo0.StartLineNumber);
-                    errorMessage += MakeLineinfoString(lineObj.FilePath, lineObj.StartLineNumber);
+                    errorMessage += MakeLineinfoString(uidInfo0.FilePath, uidInfo0.LineNumber);
+                    errorMessage += MakeLineinfoString(lineObj.FilePath, lineObj.LineNumber);
 
                     throw new Exception(errorMessage);
                 }
@@ -377,7 +376,7 @@ public class Parser
 //                newSrcText += lineObj.Comment;
 //            }
 
-            AddNoIdNode(item, lineObj, lineObj.StartLineNumber, newSrcText);
+            AddNoIdNode(item, lineObj, lineObj.LineNumber, newSrcText);
         }
 
         return item;
@@ -450,8 +449,7 @@ public class Parser
 
     public void ParseYamlSection(List<LineObject> lineObjects, ref int index)
     {
-        var stack = new Stack<Node>();
-        Node parent = stack.Peek();
+        Node parent = Stack.Peek();
         string s = "";
         bool isYamlSection = false;
 
@@ -614,8 +612,8 @@ public class Parser
             {
                 var uidInfo0 = uidList[uid];
                 var errorMessage = $"ID '#{uid}' が重複しています";
-                errorMessage += MakeLineinfoString(uidInfo0.FilePath, uidInfo0.StartLineNumber);
-                errorMessage += MakeLineinfoString(lineObj.FilePath, lineObj.StartLineNumber);
+                errorMessage += MakeLineinfoString(uidInfo0.FilePath, uidInfo0.LineNumber);
+                errorMessage += MakeLineinfoString(lineObj.FilePath, lineObj.LineNumber);
                 throw new ParseError(errorMessage, lineObj);
             }
             else
@@ -788,7 +786,7 @@ public class Parser
             //    newSrcText += lineObj.Comment;
             //}
 
-            AddNoIdNode(item, lineObj, lineObj.StartLineNumber, newSrcText);
+            AddNoIdNode(item, lineObj, lineObj.LineNumber, newSrcText);
         }
 
         return item;
@@ -870,7 +868,8 @@ public class Parser
             return new
             {
                 Text = text,
-                Comment = comment
+                Comment = comment,
+                ImageFilePath = (string)null,
             };
         }
 
@@ -879,7 +878,8 @@ public class Parser
         return new
         {
             Text = text,
-            ImageFilePath = imageFilePath
+            Comment = (string)null,
+            ImageFilePath = imageFilePath,
         };
     }
 
