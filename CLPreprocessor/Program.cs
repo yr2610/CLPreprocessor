@@ -110,7 +110,7 @@ public class Program
                 Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
             };
             string treeJsonString = JsonSerializer.Serialize(rootNode, treeOptions);
-            string treeOutputPath = AddSuffixToFileName(filePath, ".stage1", "json");
+            string treeOutputPath = AddSuffixToFileName(filePath, ".step1", "json");
             File.WriteAllText(treeOutputPath, treeJsonString);
 
             // 出力ファイル名に接尾辞を追加
