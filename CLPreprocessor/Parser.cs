@@ -127,9 +127,9 @@ public class ParseError : Exception
 
 public class Parser
 {
-    public Stack<Node> Stack { get; set; }
-    public Node Root { get; set; }
-    public Dictionary<string, List<NoIdNodeData>> NoIdNodes { get; set; } = new Dictionary<string, List<NoIdNodeData>>();
+    Stack<Node> Stack { get; set; }
+    RootNode Root { get; set; }
+    Dictionary<string, List<NoIdNodeData>> NoIdNodes { get; set; } = new Dictionary<string, List<NoIdNodeData>>();
 
     PathHelper pathHelper;
 
@@ -151,7 +151,7 @@ public class Parser
         _engine.Execute(lodashScript);
     }
 
-    public void ParseLines(IDictionary<string, object> conf, List<LineObject> lineObjects, string filePath)
+    public Node ParseLines(IDictionary<string, object> conf, List<LineObject> lineObjects, string filePath)
     {
         Stack = new Stack<Node>();
         Root = new RootNode();
@@ -179,14 +179,7 @@ public class Parser
             }
         }
 
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
-        };
-
-        string jsonString = JsonSerializer.Serialize(Root, options);
-
+        return Root;
     }
 
     // conf から機能を持った変数を移行

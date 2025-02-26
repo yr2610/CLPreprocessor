@@ -38,6 +38,29 @@ public class Program
         return null;
     }
 
+    static string AddSuffixToFileName(string filePath, string suffix, string newExtension = null)
+    {
+        // 新しい拡張子が指定されている場合は、ChangeExtension を使用
+        string tempFilePath = string.IsNullOrEmpty(newExtension) ? filePath : Path.ChangeExtension(filePath, newExtension);
+
+        // 拡張子を除いたファイル名を取得
+        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(tempFilePath);
+
+        // 拡張子を取得
+        string extension = Path.GetExtension(tempFilePath);
+
+        // サフィックスを追加
+        string newFileName = fileNameWithoutExtension + suffix + extension;
+
+        // ディレクトリパスを取得
+        string directoryPath = Path.GetDirectoryName(tempFilePath);
+
+        // 新しいファイルパスを生成
+        string newFilePath = Path.Combine(directoryPath, newFileName);
+
+        return newFilePath;
+    }
+
     public static void Main(string[] args)
     {
         if (args.Length == 0)
@@ -76,18 +99,29 @@ public class Program
             var processedLines = preprocessor.PreProcess(filePath, defines);
 
             Parser parser = new Parser(rootDirectory.ToString());
-            parser.ParseLines(config, processedLines, filePath);
+            var rootNode = parser.ParseLines(config, processedLines, filePath);
+
+
+            var treeOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+            };
+            string treeJsonString = JsonSerializer.Serialize(rootNode, treeOptions);
+            string treeOutputPath = AddSuffixToFileName(filePath, ".stage1", "json");
+            File.WriteAllText(treeOutputPath, treeJsonString);
 
             // 出力ファイル名に接尾辞を追加
-            string fileName = Path.GetFileNameWithoutExtension(filePath);
-            string outputFileName = $"{fileName}_preprocessed.json";
-            string outputPath = Path.Combine(Path.GetDirectoryName(filePath), outputFileName);
+            string outputPath = AddSuffixToFileName(filePath, "_preprocessed", "json");
 
             // JSONに出力
             var outputData = processedLines;
             var options = new JsonSerializerOptions
             {
                 WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             };
             string jsonString = JsonSerializer.Serialize(outputData, options);
