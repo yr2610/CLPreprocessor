@@ -113,9 +113,6 @@ public class Program
             string treeOutputPath = AddSuffixToFileName(filePath, ".step1", "json");
             File.WriteAllText(treeOutputPath, treeJsonString);
 
-            // 出力ファイル名に接尾辞を追加
-            string outputPath = AddSuffixToFileName(filePath, "_preprocessed", "json");
-
             // JSONに出力
             var outputData = processedLines;
             var options = new JsonSerializerOptions
@@ -127,6 +124,7 @@ public class Program
             string jsonString = JsonSerializer.Serialize(outputData, options);
 
             // JSONをファイルに書き出し
+            string outputPath = AddSuffixToFileName(filePath, "_preprocessed", "json");
             File.WriteAllText(outputPath, jsonString);
 
             Console.WriteLine($"処理結果を {outputPath} に保存しました。");
