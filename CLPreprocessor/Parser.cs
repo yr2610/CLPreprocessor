@@ -7,6 +7,10 @@ using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using System.Dynamic;
+
+using Microsoft.ClearScript;
+using Microsoft.ClearScript.V8;
 
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
@@ -129,9 +133,22 @@ public class Parser
 
     PathHelper pathHelper;
 
+    readonly V8ScriptEngine _engine;
+
     public Parser(string rootDirectory)
     {
         pathHelper = new PathHelper(rootDirectory);
+
+        _engine = new V8ScriptEngine();
+        LoadLodash();
+    }
+
+    private void LoadLodash()
+    {
+        var exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        var lodashPath = Path.Combine(exeDirectory, "scripts", "lodash.min.js");
+        var lodashScript = File.ReadAllText(lodashPath);
+        _engine.Execute(lodashScript);
     }
 
     public void ParseLines(IDictionary<string, object> conf, List<LineObject> lineObjects, string filePath)
@@ -151,14 +168,14 @@ public class Parser
                 continue;
             }
 
-            if (ParseUnorderedList(lineObject) != null)
+            if (ParseUnorderedList(lineObjects, ref i) != null)
             {
                 continue;
             }
 
-            if (Regex.IsMatch(lineObject.Line, @"^\s*```yaml\s*$"))
+            if (ParseYamlSection(lineObjects, ref i) != null)
             {
-                ParseYamlSection(lineObjects, ref i);
+                continue;
             }
         }
 
@@ -447,32 +464,27 @@ public class Parser
         return node?.TemporaryVariables["uidList"] as Dictionary<string, LineObject>;
     }
 
-    public void ParseYamlSection(List<LineObject> lineObjects, ref int index)
+    public HeaderNode ParseYamlSection(List<LineObject> lineObjects, ref int index)
     {
+        if (!Regex.IsMatch(lineObjects[index].Line, @"^\s*```yaml\s*$"))
+        {
+            return null;
+        }
+
         Node parent = Stack.Peek();
         string s = "";
-        bool isYamlSection = false;
 
+        index++;
         for (; index < lineObjects.Count; index++)
         {
             var lineObject = lineObjects[index];
             var line = lineObject.Line;
 
-            if (Regex.IsMatch(line, @"^\s*```yaml\s*$"))
+            if (Regex.IsMatch(line, @"^\s*```\s*$"))
             {
-                isYamlSection = true;
-                continue;
+                break;
             }
-
-            if (isYamlSection)
-            {
-                if (Regex.IsMatch(line, @"^\s*```\s*$"))
-                {
-                    isYamlSection = false;
-                    break;
-                }
-                s += line + "\n";
-            }
+            s += line + "\n";
         }
 
         var deserializer = new DeserializerBuilder()
@@ -489,8 +501,11 @@ public class Parser
             throw new Exception("YAML の parse に失敗しました。", e);
         }
 
-        ConvertFunctions(o);
+        var jsObject = ConvertToJsObject(o, _engine);
+        _engine.Script.myObject = jsObject;
+        //ConvertFunctions(o);
 
+        // FIXME: これも JS 内でやるべきこと
         Node paramNode = parent;
         while (paramNode.Level != 1)
         {
@@ -504,6 +519,35 @@ public class Parser
 
         paramNode.TemporaryVariables["params"] = DeepMerge(
             (Dictionary<string, object>)paramNode.TemporaryVariables["params"], o);
+
+        return paramNode as HeaderNode;
+    }
+
+    private object ConvertToJsObject(object data, V8ScriptEngine engine)
+    {
+        if (data is Dictionary<string, object> dict)
+        {
+            var jsDict = new ExpandoObject();
+            var jsDictDict = (IDictionary<string, object>)jsDict;
+            foreach (var kvp in dict)
+            {
+                jsDictDict[kvp.Key] = ConvertToJsObject(kvp.Value, engine);
+                if (kvp.Value is string str && str.TrimStart().StartsWith("function"))
+                {
+                    engine.Execute($"var {kvp.Key} = {str};");
+                    jsDictDict[kvp.Key] = engine.Script[kvp.Key];
+                }
+            }
+            return jsDict;
+        }
+        else if (data is List<object> list)
+        {
+            return list.Select(item => ConvertToJsObject(item, engine)).ToList();
+        }
+        else
+        {
+            return data; // 基本データ型やその他はそのまま返す
+        }
     }
 
     private void ConvertFunctions(Dictionary<string, object> o)
@@ -538,8 +582,9 @@ public class Parser
     }
 
 
-    public ItemNode ParseUnorderedList(LineObject lineObj)
+    public ItemNode ParseUnorderedList(List<LineObject> lineObjects, ref int index)
     {
+        LineObject lineObj = lineObjects[index];
         string line = lineObj.Line;
 
         // 行頭に全角スペース、タブがないかのチェック
@@ -700,6 +745,10 @@ public class Parser
 
         while (Regex.IsMatch(text, @".*\s\+\s*$"))
         {
+            index++;
+            lineObj = lineObjects[index];
+            line = lineObj.Line;
+
             line = line.TrimStart();
             text = text.TrimEnd().TrimEnd('+') + "\n" + line;
         }
