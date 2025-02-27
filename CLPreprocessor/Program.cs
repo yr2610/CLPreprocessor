@@ -101,7 +101,6 @@ public class Program
             Parser parser = new Parser(rootDirectory.ToString());
             var rootNode = parser.ParseLines(config, processedLines, filePath);
 
-
             var treeOptions = new JsonSerializerOptions
             {
                 WriteIndented = true,
@@ -113,6 +112,7 @@ public class Program
             string treeOutputPath = AddSuffixToFileName(filePath, ".step1", "json");
             File.WriteAllText(treeOutputPath, treeJsonString);
 
+#if false
             // JSONに出力
             var outputData = processedLines;
             var options = new JsonSerializerOptions
@@ -128,6 +128,7 @@ public class Program
             File.WriteAllText(outputPath, jsonString);
 
             Console.WriteLine($"処理結果を {outputPath} に保存しました。");
+#endif
         }
         catch (Exception ex)
         {

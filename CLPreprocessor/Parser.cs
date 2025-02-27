@@ -76,8 +76,10 @@ public class TableHeader
 
 public class TableHeaderNonInputArea
 {
+    public char Marker { get; set; }
     public int Group { get; set; }
     public string Name { get; set; }
+    public string Comment { get; set; }
     public int Size { get; set; }
 }
 
@@ -88,7 +90,7 @@ public class HeaderNode : Node
     }
 
     public List<TableHeader> TableHeaders { get; set; } = new List<TableHeader>();
-    public List<TableHeaderNonInputArea> TableHeaderNonInputArea { get; set; } = new List<TableHeaderNonInputArea>();
+    public List<TableHeaderNonInputArea> TableHeadersNonInputArea { get; set; } = new List<TableHeaderNonInputArea>();
 
     public string Url { get; set; }
     public string SrcHash { get; set; }
@@ -104,7 +106,7 @@ public class ItemNode : Node
     public string Marker { get; set; }
     public int Group { get; set; }
     public int DepthInGroup { get; set; }
-    public List<string> TableData { get; set; }
+    //public List<string> TableData { get; set; }
     public string Comment { get; set; }
     public string ImageFilePath { get; set; }
     public Dictionary<string, object> InitialValues { get; set; }
@@ -173,6 +175,11 @@ public class Parser
                 continue;
             }
 
+            if (ParseHeaderList(lineObject) != null)
+            {
+                continue;
+            }
+
             if (ParseYamlSection(lineObjects, ref i) != null)
             {
                 continue;
@@ -215,17 +222,17 @@ public class Parser
                 {
                     targetKey = "project";
                 }
-                node.TemporaryVariables[targetKey] = value;
+                node.Variables[targetKey] = value;
             }
         }
 
-        if (node.TemporaryVariables.ContainsKey("rootDirectory") && node.TemporaryVariables["rootDirectory"] is string rootDirectory)
+        if (node.Variables.ContainsKey("rootDirectory") && node.Variables["rootDirectory"] is string rootDirectory)
         {
             var basePath = Path.GetDirectoryName(filePath);
             var absolutePath = rootDirectory;
             var relativePath = PathUtils.GetRelativePath(basePath, absolutePath);
 
-            node.TemporaryVariables["rootDirectory"] = relativePath;
+            node.Variables["rootDirectory"] = relativePath;
         }
 
         if (conf.ContainsKey("$input") && conf["$input"] is Dictionary<string, object> input)
@@ -363,7 +370,7 @@ public class Parser
             Variables = new Dictionary<string, object>(), // variables の使用方法が不明
             Children = new List<Node>(),
             TableHeaders = tableHeaders,
-            TableHeaderNonInputArea = tableHeadersNonInputArea,
+            TableHeadersNonInputArea = tableHeadersNonInputArea,
             Url = url,
             SrcHash = null,
         };
@@ -756,6 +763,7 @@ public class Parser
             imageFilePath = commentResult.ImageFilePath;
         }
 
+#if false
         var td = Regex.Match(text, @"^([^\|]+)\|(.*)\|$");
         List<string> data = null;
         if (td.Success)
@@ -775,6 +783,7 @@ public class Parser
                 throw new ParseError(errorMessage, lineObj);
             }
         }
+#endif
 
         var link = Regex.Match(text.Trim(), @"^\[(.+)\]\((.+)\)$");
         string url = null;
@@ -805,7 +814,6 @@ public class Parser
             DepthInGroup = -1,
             Id = uid,
             Text = text,
-            TableData = data,
             Comment = comment,
             ImageFilePath = imageFilePath,
             InitialValues = initialValues,
@@ -834,6 +842,7 @@ public class Parser
         return item;
     }
 
+#if false
     public List<string> GetDataFromTableRow(List<string> srcData, Node parentNode, List<int> tableHeaderIds = null)
     {
         var data = new List<string>();
@@ -883,6 +892,7 @@ public class Parser
 
         return data;
     }
+#endif
 
     private dynamic ParseComment(string text, LineObject lineObj)
     {
@@ -923,6 +933,77 @@ public class Parser
             Comment = (string)null,
             ImageFilePath = imageFilePath,
         };
+    }
+
+    public List<TableHeaderNonInputArea> ParseHeaderList(LineObject lineObject)
+    {
+        // "*.", "-.", "+." はチェック項目列の見出しとする
+        string line = lineObject.Line;
+        var headerList = Regex.Match(line, @"^(?:\s*)([\*\+\-])\.\s+(.*)\s*$");
+        if (!headerList.Success)
+        {
+            return null;
+        }
+
+        var parent = Stack.Peek();
+
+        // 現状は H1 の直下専用
+        if (parent.Kind != NodeKind.H || parent.Level != 1)
+        {
+            throw new InvalidOperationException("Parent node is not a HeaderNode or is not at level 1.");
+        }
+
+        var headerParent = parent as HeaderNode;
+        if (headerParent == null)
+        {
+            throw new InvalidOperationException("Parent node is not a HeaderNode.");
+        }
+
+        var text = headerList.Groups[2].Value;
+
+        string comment = null;
+        var commentMatch = Regex.Match(text, @"^(.+)\s*\[\^(.+)\]$");
+        if (commentMatch.Success)
+        {
+            text = commentMatch.Groups[1].Value.Trim();
+            comment = commentMatch.Groups[2].Value.Trim();
+            comment = comment.Replace("<br>", "\n");
+        }
+
+        var headers = headerParent.TableHeadersNonInputArea;
+        var prevName = (headers.Count >= 1) ? headers[headers.Count - 1].Name : null;
+
+        if (string.IsNullOrEmpty(text) || (prevName != null && text == prevName))
+        {
+            headers[headers.Count - 1].Size++;
+        }
+        else
+        {
+            var marker = headerList.Groups[1].Value[0];  // char として取得
+
+            var group = 0;
+            if (headers.Count >= 1)
+            {
+                group = headers[headers.Count - 1].Group;
+                if (headers[headers.Count - 1].Marker != marker)
+                {
+                    group++;
+                }
+            }
+
+            var item = new TableHeaderNonInputArea
+            {
+                Marker = marker,
+                Group = group,
+                Name = text,
+                Comment = comment,
+                Size = 1
+            };
+
+            headers.Add(item);
+        }
+
+        return headers;
     }
 
 }
