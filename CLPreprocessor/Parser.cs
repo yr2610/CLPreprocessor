@@ -188,6 +188,12 @@ public class Parser
             {
                 continue;
             }
+
+            if (ParseVariable(lineObject) != null)
+            {
+                continue;
+            }
+
         }
 
         return Root;
@@ -1006,6 +1012,24 @@ public class Parser
         }
 
         return headers;
+    }
+
+    string ParseVariable(LineObject lineObject)
+    {
+        // 正規表現で [key]: value の形式を解析
+        string line = lineObject.Line;
+        var regex = new Regex(@"^\s*\[(.+)\]:\s+(.+)$");
+        var match = regex.Match(line);
+
+        if (!match.Success)
+        {
+            return null;
+        }
+        string key = match.Groups[1].Value.Trim();
+        string value = match.Groups[2].Value.Trim();
+        Stack.Peek().Variables[key] = value;
+
+        return value;
     }
 
 }
