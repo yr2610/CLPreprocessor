@@ -68,15 +68,19 @@ public class RootNode : Node
     }
 }
 
+#if false
 public class TableHeader
 {
     public string Name { get; set; }
     public int Id { get; set; }
 }
+#endif
 
 public class TableHeaderNonInputArea
 {
+    [JsonIgnore]
     public char Marker { get; set; }
+
     public int Group { get; set; }
     public string Name { get; set; }
     public string Comment { get; set; }
@@ -89,7 +93,7 @@ public class HeaderNode : Node
     {
     }
 
-    public List<TableHeader> TableHeaders { get; set; } = new List<TableHeader>();
+    //public List<TableHeader> TableHeaders { get; set; } = new List<TableHeader>();
     public List<TableHeaderNonInputArea> TableHeadersNonInputArea { get; set; } = new List<TableHeaderNonInputArea>();
 
     public string Url { get; set; }
@@ -290,7 +294,7 @@ public class Parser
         }
 
         string uid = null;
-        List<TableHeader> tableHeaders = null;
+        //List<TableHeader> tableHeaders = null;
         List<TableHeaderNonInputArea> tableHeadersNonInputArea = null;
         string url = null;
 
@@ -319,7 +323,6 @@ public class Parser
                 }
             }
 
-            tableHeaders = new List<TableHeader>();
             tableHeadersNonInputArea = new List<TableHeaderNonInputArea>();
         }
         else
@@ -369,7 +372,6 @@ public class Parser
             Text = text,
             Variables = new Dictionary<string, object>(), // variables の使用方法が不明
             Children = new List<Node>(),
-            TableHeaders = tableHeaders,
             TableHeadersNonInputArea = tableHeadersNonInputArea,
             Url = url,
             SrcHash = null,
