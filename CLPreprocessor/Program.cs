@@ -61,6 +61,21 @@ public class Program
         return newFilePath;
     }
 
+    // とりあえずシリアライズだけ対応
+    public class JsonDerivedTypeConverter : System.Text.Json.Serialization.JsonConverter<Node>
+    {
+        public override Node Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            throw new NotImplementedException(); // デシリアライズ不要ならこれでOK
+        }
+
+        public override void Write(Utf8JsonWriter writer, Node value, JsonSerializerOptions options)
+        {
+            // そのまま型に応じてシリアライズ
+            JsonSerializer.Serialize(writer, value, value.GetType(), options);
+        }
+    }
+
     public static void Main(string[] args)
     {
         if (args.Length == 0)
@@ -106,7 +121,12 @@ public class Program
                 WriteIndented = true,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                Converters =
+                {
+                    new System.Text.Json.Serialization.JsonStringEnumConverter(),
+                    new JsonDerivedTypeConverter()
+                },
             };
             string treeJsonString = JsonSerializer.Serialize(rootNode, treeOptions);
             string treeOutputPath = AddSuffixToFileName(filePath, ".step1", "json");
