@@ -43,11 +43,16 @@ public class Node
     }
 
     //public string SourceFiles { get; set; } // txt2json 自身がソースファイルを更新するので、最後に取得
+    [JsonPropertyOrder(0x00)]
     public NodeKind Kind { get; set; }
-    public int Level { get; set; } = 0;
+    public int? Level { get; set; } = null;
+    [JsonPropertyOrder(0x40)]
     public string Id { get; set; }   // sourceFiles の last modified date を基に生成した id を埋め込む
+    [JsonPropertyOrder(0x40)]
     public string Text { get; set; } = "";
+    [JsonPropertyOrder(0xf0)]
     public Dictionary<string, object> Variables { get; set; } = new Dictionary<string, object>();
+    [JsonPropertyOrder(0xff)]
     public List<Node> Children { get; set; } = new List<Node>();
 
     // JSON シリアライズ時に無視
@@ -62,6 +67,8 @@ public class RootNode : Node
 {
     public RootNode() : base(NodeKind.H)
     {
+        Level = 0;
+
         // UID重複チェック用
         // 「複数人で１つのファイルを作成（ID自動生成）してマージしたら衝突」は考慮しなくて良いぐらいの確率だけど、「IDごとコピペして重複」が高頻度で発生する恐れがあるので
         TemporaryVariables["uidList"] = new Dictionary<string, LineObject>();
@@ -91,12 +98,17 @@ public class HeaderNode : Node
 {
     public HeaderNode() : base(NodeKind.H)
     {
+        Level = 1;
     }
 
     //public List<TableHeader> TableHeaders { get; set; } = new List<TableHeader>();
+    [JsonPropertyOrder(0x80)]
     public List<TableHeaderNonInputArea> TableHeadersNonInputArea { get; set; } = new List<TableHeaderNonInputArea>();
 
+    [JsonPropertyOrder(0x80)]
     public string Url { get; set; }
+
+    [JsonPropertyOrder(0xf8)]
     public string SrcHash { get; set; }
 }
 
@@ -106,15 +118,25 @@ public class ItemNode : Node
     {
     }
 
+    [JsonIgnore]
     public int Indent { get; set; }
+    [JsonIgnore]
     public string Marker { get; set; }
+
+    [JsonPropertyOrder(0x40)]
     public int Group { get; set; }
+    [JsonPropertyOrder(0x40)]
     public int DepthInGroup { get; set; }
     //public List<string> TableData { get; set; }
+    [JsonPropertyOrder(0x80)]
     public string Comment { get; set; }
+    [JsonPropertyOrder(0x80)]
     public string ImageFilePath { get; set; }
+    [JsonPropertyOrder(0x80)]
     public Dictionary<string, object> InitialValues { get; set; }
+    [JsonPropertyOrder(0x80)]
     public Dictionary<string, string> Attributes { get; set; }
+    [JsonPropertyOrder(0x80)]
     public string Url { get; set; }
 }
 
@@ -258,25 +280,25 @@ public class Parser
 
             if (input.ContainsKey("rules") && input["rules"] is List<object> rules)
             {
-                var conditionalColumnValues = node.TemporaryVariables.ContainsKey("conditionalColumnValues") && node.TemporaryVariables["conditionalColumnValues"] is string conditionalColumnValuesJson ?
-                    JsonSerializer.Deserialize<List<Dictionary<string, object>>>(conditionalColumnValuesJson) :
-                    new List<Dictionary<string, object>>();
+                var tempConditionalColumnValues = node.TemporaryVariables.TryGetValue("conditionalColumnValues", out object value)
+                    ? value
+                    : (node.TemporaryVariables["conditionalColumnValues"] = new List<Dictionary<string, object>>());
+                var conditionalColumnValues = tempConditionalColumnValues as List<Dictionary<string, object>>;
 
                 foreach (var ruleObj in rules)
                 {
-                    if (ruleObj is Dictionary<string, object> rule)
+                    if (ruleObj is Dictionary<object, object> rule)
                     {
-                        var condition = rule["condition"].ToString();
-                        var values = rule["values"] as Dictionary<string, object>;
+                        var condition = new Regex(rule["condition"].ToString());
+                        var values = rule["values"] as Dictionary<object, object>;
 
                         conditionalColumnValues.Add(new Dictionary<string, object>
-                    {
-                        { "re", condition },
-                        { "columnValues", values }
-                    });
+                        {
+                            { "re", condition },
+                            { "columnValues", values }
+                        });
                     }
                 }
-                node.TemporaryVariables["conditionalColumnValues"] = JsonSerializer.Serialize(conditionalColumnValues);
             }
         }
     }
