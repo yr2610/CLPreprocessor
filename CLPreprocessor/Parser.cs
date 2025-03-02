@@ -1054,4 +1054,189 @@ public class Parser
         return value;
     }
 
+    public static void ProcessInitialValues(Node root)
+    {
+        var columnNamesStack = new Stack<Dictionary<string, object>>();
+        var defaultValuesStack = new Stack<Dictionary<string, object>>();
+        var conditionalColumnValuesStack = new Stack<List<Dictionary<string, object>>>();
+
+        columnNamesStack.Push(new Dictionary<string, object>());
+        defaultValuesStack.Push(new Dictionary<string, object>());
+        conditionalColumnValuesStack.Push(new List<Dictionary<string, object>>());
+
+        ForAllNodesRecurse(root, null, -1,
+            (node, parent, index) => // preChildren
+            {
+                if (node.Children.Count != 0)
+                {
+                    if (node.TemporaryVariables.ContainsKey("columnNames") && node.TemporaryVariables["columnNames"] is Dictionary<string, object> columnNames)
+                    {
+                        columnNamesStack.Push(columnNames);
+                    }
+
+                    if (node.TemporaryVariables.ContainsKey("defaultColumnValues") && node.TemporaryVariables["defaultColumnValues"] is Dictionary<string, object> defaultColumnValues)
+                    {
+                        var value = new Dictionary<string, object>(defaultValuesStack.Peek());
+                        foreach (var kvp in defaultColumnValues)
+                        {
+                            value[kvp.Key] = kvp.Value;
+                        }
+                        defaultValuesStack.Push(value);
+                    }
+
+                    if (node.TemporaryVariables.ContainsKey("conditionalColumnValues") && node.TemporaryVariables["conditionalColumnValues"] is List<Dictionary<string, object>> conditionalColumnValues)
+                    {
+                        var value = conditionalColumnValues.Concat(conditionalColumnValuesStack.Peek()).ToList();
+                        conditionalColumnValuesStack.Push(KeyValuePairToObject(value, columnNamesStack.Peek()));
+                    }
+
+                    if (node.TemporaryVariables.ContainsKey("initialValues"))
+                    {
+                        node.TemporaryVariables.Remove("initialValues");
+                    }
+                }
+                else
+                {
+                    if (!node.TemporaryVariables.ContainsKey("initialValues"))
+                    {
+                        node.TemporaryVariables["initialValues"] = new Dictionary<string, object>();
+                    }
+
+                    foreach (var elem in conditionalColumnValuesStack.Peek())
+                    {
+                        var columnValues = new Dictionary<string, object>();
+                        foreach (var kvp in elem["columnValues"] as Dictionary<string, object>)
+                        {
+                            if (!node.TemporaryVariables["initialValues"].ToString().Contains(kvp.Key))
+                            {
+                                columnValues[kvp.Key] = kvp.Value;
+                            }
+                        }
+
+                        if (columnValues.Count != 0 && (elem["re"] as Regex).IsMatch(node.Text))
+                        {
+                            foreach (var kvp in columnValues)
+                            {
+                                ((Dictionary<string, object>)node.TemporaryVariables["initialValues"])[kvp.Key] = kvp.Value;
+                            }
+                        }
+                    }
+
+                    foreach (var kvp in defaultValuesStack.Peek())
+                    {
+                        if (!node.TemporaryVariables["initialValues"].ToString().Contains(kvp.Key))
+                        {
+                            ((Dictionary<string, object>)node.TemporaryVariables["initialValues"])[kvp.Key] = kvp.Value;
+                        }
+                    }
+
+                    var initialValues = (Dictionary<string, object>)node.TemporaryVariables["initialValues"];
+                    foreach (var key in initialValues.Keys.ToList())
+                    {
+                        if (initialValues[key] is string strValue && string.IsNullOrEmpty(strValue))
+                        {
+                            initialValues.Remove(key);
+                        }
+                    }
+
+                    if (initialValues.Count == 0)
+                    {
+                        node.TemporaryVariables.Remove("initialValues");
+                    }
+                }
+                return false;
+            },
+            (node, parent, index) => // postChildren
+            {
+                if (node.Children.Count != 0)
+                {
+                    if (node.TemporaryVariables.ContainsKey("columnNames") && node.TemporaryVariables["columnNames"] is Dictionary<string, object>)
+                    {
+                        columnNamesStack.Pop();
+                    }
+
+                    if (node.TemporaryVariables.ContainsKey("defaultColumnValues") && node.TemporaryVariables["defaultColumnValues"] is Dictionary<string, object>)
+                    {
+                        defaultValuesStack.Pop();
+                    }
+
+                    if (node.TemporaryVariables.ContainsKey("conditionalColumnValues") && node.TemporaryVariables["conditionalColumnValues"] is List<Dictionary<string, object>>)
+                    {
+                        conditionalColumnValuesStack.Pop();
+                    }
+                }
+            }
+        );
+    }
+
+    private static bool ForAllNodesRecurse(Node node, Node parent, int index, Func<Node, Node, int, bool> preChildren, Action<Node, Node, int> postChildren)
+    {
+        if (preChildren(node, parent, index))
+        {
+            return true;
+        }
+
+        for (int i = 0; i < node.Children.Count; i++)
+        {
+            if (node.Children[i] == null)
+            {
+                continue;
+            }
+            ForAllNodesRecurse(node.Children[i], node, i, preChildren, postChildren);
+        }
+
+        postChildren?.Invoke(node, parent, index);
+
+        return false;
+    }
+
+    private static List<Dictionary<string, object>> KeyValuePairToObject(List<Dictionary<string, object>> conditionalColumnValues, Dictionary<string, object> currentColumnNames)
+    {
+        var result = new List<Dictionary<string, object>>();
+
+        foreach (var conditionalColumnValue in conditionalColumnValues)
+        {
+            var re = conditionalColumnValue["re"] as Regex;
+            if (!(conditionalColumnValue["columnValues"] is List<object> columnValuesData))
+            {
+                result.Add(new Dictionary<string, object>
+                {
+                    { "re", re },
+                    { "columnValues", conditionalColumnValue["columnValues"] }
+                });
+                continue;
+            }
+
+            var columnValues = new Dictionary<string, object>();
+            for (int i = 0; i < columnValuesData.Count; i++)
+            {
+                if (columnValuesData[i] is Dictionary<string, object> element)
+                {
+                    if (!element.ContainsKey("key"))
+                    {
+                        if (i >= currentColumnNames.Count)
+                        {
+                            // エラー処理（例: 例外をスローする）
+                            throw new Exception("初期値が列名リストの範囲外に設定されています。");
+                        }
+                        var key = currentColumnNames.Keys.ToList()[i];
+                        columnValues[key] = element["value"];
+                    }
+                    else
+                    {
+                        columnValues[element["key"].ToString()] = element["value"];
+                    }
+                }
+            }
+
+            result.Add(new Dictionary<string, object>
+            {
+                { "re", re },
+                { "columnValues", columnValues }
+            });
+        }
+
+        return result;
+    }
+
 }
