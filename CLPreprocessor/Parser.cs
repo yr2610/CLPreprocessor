@@ -1159,17 +1159,17 @@ public class Parser
             {
                 if (node.Children.Count != 0)
                 {
-                    if (node.TemporaryVariables.ContainsKey("columnNames") && node.TemporaryVariables["columnNames"] is Dictionary<string, object>)
+                    if (node.TemporaryVariables.ContainsKey("columnNames"))
                     {
                         columnNamesStack.Pop();
                     }
 
-                    if (node.TemporaryVariables.ContainsKey("defaultColumnValues") && node.TemporaryVariables["defaultColumnValues"] is Dictionary<string, object>)
+                    if (node.TemporaryVariables.ContainsKey("defaultColumnValues"))
                     {
                         defaultValuesStack.Pop();
                     }
 
-                    if (node.TemporaryVariables.ContainsKey("conditionalColumnValues") && node.TemporaryVariables["conditionalColumnValues"] is List<Dictionary<string, object>>)
+                    if (node.TemporaryVariables.ContainsKey("conditionalColumnValues"))
                     {
                         conditionalColumnValuesStack.Pop();
                     }
