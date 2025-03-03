@@ -218,6 +218,8 @@ public class Parser
 
         }
 
+        ProcessInitialValues(Root);
+
         return Root;
     }
 
@@ -1054,7 +1056,7 @@ public class Parser
         return value;
     }
 
-    public static void ProcessInitialValues(Node root)
+    static void ProcessInitialValues(Node root)
     {
         var columnNamesStack = new Stack<Dictionary<string, object>>();
         var defaultValuesStack = new Stack<Dictionary<string, object>>();
@@ -1090,26 +1092,33 @@ public class Parser
                         conditionalColumnValuesStack.Push(KeyValuePairToObject(value, columnNamesStack.Peek()));
                     }
 
+#if false
+                    // XXX: 本来はエラーとすべきだけど、一旦削除するようにしておく
+                    // XXX: 仕様変更するかも
                     if (node.TemporaryVariables.ContainsKey("initialValues"))
                     {
                         node.TemporaryVariables.Remove("initialValues");
                     }
+#endif
                 }
                 else
                 {
-                    if (!node.TemporaryVariables.ContainsKey("initialValues"))
+                    var leafNode = node as ItemNode;
+
+                    if (leafNode.InitialValues == null)
                     {
-                        node.TemporaryVariables["initialValues"] = new Dictionary<string, object>();
+                        leafNode.InitialValues = new Dictionary<string, object>();
                     }
 
                     foreach (var elem in conditionalColumnValuesStack.Peek())
                     {
                         var columnValues = new Dictionary<string, object>();
-                        foreach (var kvp in elem["columnValues"] as Dictionary<string, object>)
+                        foreach (var kvp in elem["columnValues"] as Dictionary<object, object>)
                         {
-                            if (!node.TemporaryVariables["initialValues"].ToString().Contains(kvp.Key))
+                            var key = kvp.Key.ToString();
+                            if (!leafNode.InitialValues.ContainsKey(key))
                             {
-                                columnValues[kvp.Key] = kvp.Value;
+                                columnValues[key] = kvp.Value;
                             }
                         }
 
@@ -1117,20 +1126,20 @@ public class Parser
                         {
                             foreach (var kvp in columnValues)
                             {
-                                ((Dictionary<string, object>)node.TemporaryVariables["initialValues"])[kvp.Key] = kvp.Value;
+                                leafNode.InitialValues[kvp.Key] = kvp.Value;
                             }
                         }
                     }
 
                     foreach (var kvp in defaultValuesStack.Peek())
                     {
-                        if (!node.TemporaryVariables["initialValues"].ToString().Contains(kvp.Key))
+                        if (!leafNode.InitialValues.ContainsKey(kvp.Key))
                         {
-                            ((Dictionary<string, object>)node.TemporaryVariables["initialValues"])[kvp.Key] = kvp.Value;
+                            leafNode.InitialValues[kvp.Key] = kvp.Value;
                         }
                     }
 
-                    var initialValues = (Dictionary<string, object>)node.TemporaryVariables["initialValues"];
+                    var initialValues = leafNode.InitialValues;
                     foreach (var key in initialValues.Keys.ToList())
                     {
                         if (initialValues[key] is string strValue && string.IsNullOrEmpty(strValue))
@@ -1141,7 +1150,7 @@ public class Parser
 
                     if (initialValues.Count == 0)
                     {
-                        node.TemporaryVariables.Remove("initialValues");
+                        leafNode.InitialValues = null;
                     }
                 }
                 return false;
