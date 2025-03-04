@@ -218,6 +218,7 @@ public class Parser
 
         }
 
+        ConvertImageFilePathsToRelative(Root);
         ProcessInitialValues(Root);
 
         return Root;
@@ -853,6 +854,8 @@ public class Parser
             Url = url
         };
 
+        item.TemporaryVariables["lineObj"] = lineObj;
+
         AddChildNode(Stack.Peek(), item);
         Stack.Push(item);
 
@@ -1054,6 +1057,44 @@ public class Parser
         Stack.Peek().Variables[key] = value;
 
         return value;
+    }
+
+    void ConvertImageFilePathsToRelative(Node root)
+    {
+        ForAllNodesRecurse(root, null, -1, (node, parent, index) =>
+        {
+            if (!(node is ItemNode itemNode))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(itemNode.ImageFilePath))
+            {
+                return false;
+            }
+
+            var lineObj = itemNode.TemporaryVariables["lineObj"] as LineObject;
+            var projectDirectoryFromRoot = lineObj.ProjectDirectory;
+            var fileParentFolderAbs = pathHelper.SourceLocalPathToAbsolutePath(Path.GetDirectoryName(lineObj.FilePath), projectDirectoryFromRoot);
+
+            string GetImageFilePathFromEntryProject(string imageFilePath)
+            {
+                if (imageFilePath[0] != '/')
+                {
+                    imageFilePath = Path.Combine(fileParentFolderAbs, imageFilePath);
+                }
+                else
+                {
+                    imageFilePath = pathHelper.GetAbsoluteProjectPath(imageFilePath.Substring(1));
+                }
+
+                return pathHelper.AbsolutePathToSourceLocalPath(imageFilePath, projectDirectoryFromRoot);
+            }
+
+            itemNode.ImageFilePath = GetImageFilePathFromEntryProject(itemNode.ImageFilePath);
+
+            return false;
+        }, null);
     }
 
     static void ProcessInitialValues(Node root)
