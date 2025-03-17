@@ -113,6 +113,8 @@ public class Program
             var preprocessor = new Preprocessor(rootDirectory.ToString());
             var processedLines = preprocessor.PreProcess(filePath, defines);
 
+            var sheetSources = LineSplitter.SplitLines(processedLines);
+
             // JSONに出力
             var outputData = processedLines;
             var options = new JsonSerializerOptions
