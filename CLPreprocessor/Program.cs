@@ -113,6 +113,23 @@ public class Program
             var preprocessor = new Preprocessor(rootDirectory.ToString());
             var processedLines = preprocessor.PreProcess(filePath, defines);
 
+            // JSONに出力
+            var outputData = processedLines;
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+            string jsonString = JsonSerializer.Serialize(outputData, options);
+
+            // JSONをファイルに書き出し
+            string outputPath = AddSuffixToFileName(filePath, ".preprocessed", "json");
+            File.WriteAllText(outputPath, jsonString);
+
+            //Console.WriteLine($"処理結果を {outputPath} に保存しました。");
+
+
             Parser parser = new Parser(rootDirectory.ToString());
             var rootNode = parser.ParseLines(config, processedLines, filePath);
 
@@ -131,24 +148,6 @@ public class Program
             string treeJsonString = JsonSerializer.Serialize(rootNode, treeOptions);
             string treeOutputPath = AddSuffixToFileName(filePath, ".step1", "json");
             File.WriteAllText(treeOutputPath, treeJsonString);
-
-#if false
-            // JSONに出力
-            var outputData = processedLines;
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-            string jsonString = JsonSerializer.Serialize(outputData, options);
-
-            // JSONをファイルに書き出し
-            string outputPath = AddSuffixToFileName(filePath, "_preprocessed", "json");
-            File.WriteAllText(outputPath, jsonString);
-
-            Console.WriteLine($"処理結果を {outputPath} に保存しました。");
-#endif
         }
         catch (Exception ex)
         {

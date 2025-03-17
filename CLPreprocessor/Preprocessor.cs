@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -1024,5 +1025,132 @@ public class PathHelper
     {
         var backupDirectoryAbs = GetAbsoluteBackupDirectory(projectPathFromRoot);
         return Path.Combine(backupDirectoryAbs, filePathProjectLocal);
+    }
+}
+
+public class SheetSource
+{
+    public string SheetName { get; set; }
+    public string UniqueId { get; set; }
+    public List<LineObject> Lines { get; set; }
+    public string Hash { get; set; }
+}
+
+public class LineSplitter
+{
+    private static readonly Regex HeaderRegex = new Regex(@"^#");
+    private static readonly Regex HeaderStructureRegex = new Regex(@"^#(\s+\[#[a-zA-Z_]\w*\])?\s+.+\s*$");
+    private static readonly Regex ValidSheetNameRegex = new Regex(@"^[^\\/:?*""<>|]+$");
+    private static readonly Regex YamlStartRegex = new Regex(@"^```yaml\s*$");
+    private static readonly Regex YamlEndRegex = new Regex(@"^```\s*$");
+
+    public static List<SheetSource> SplitLines(List<LineObject> lines)
+    {
+        var sheetSources = new List<SheetSource>();
+        var currentSheetSource = new SheetSource { SheetName = null, UniqueId = null, Lines = new List<LineObject>(), Hash = null };
+        bool foundFirstHeader = false;
+        bool inYamlSection = false;
+
+        foreach (var line in lines)
+        {
+            if (YamlStartRegex.IsMatch(line.Line))
+            {
+                inYamlSection = true;
+            }
+            else if (YamlEndRegex.IsMatch(line.Line))
+            {
+                inYamlSection = false;
+            }
+
+            if (!foundFirstHeader)
+            {
+                if (!inYamlSection && IsHeaderLine(line.Line))
+                {
+                    foundFirstHeader = true;
+                    currentSheetSource.Hash = ComputeHash(currentSheetSource.Lines);
+                    sheetSources.Add(currentSheetSource);
+                    currentSheetSource = CreateSheetSourceFromHeader(line.Line);
+                }
+                else
+                {
+                    currentSheetSource.Lines.Add(line);
+                }
+            }
+            else
+            {
+                if (!inYamlSection && IsHeaderLine(line.Line))
+                {
+                    currentSheetSource.Hash = ComputeHash(currentSheetSource.Lines);
+                    sheetSources.Add(currentSheetSource);
+                    currentSheetSource = CreateSheetSourceFromHeader(line.Line);
+                }
+                currentSheetSource.Lines.Add(line);
+            }
+        }
+
+        if (currentSheetSource.Lines.Count > 0)
+        {
+            currentSheetSource.Hash = ComputeHash(currentSheetSource.Lines);
+            sheetSources.Add(currentSheetSource);
+        }
+
+        return sheetSources;
+    }
+
+    private static bool IsHeaderLine(string line)
+    {
+        if (!HeaderRegex.IsMatch(line))
+        {
+            return false;
+        }
+
+        if (!HeaderStructureRegex.IsMatch(line))
+        {
+            throw new ArgumentException($"Invalid header structure: {line}");
+        }
+
+        return true;
+    }
+
+    private static SheetSource CreateSheetSourceFromHeader(string line)
+    {
+        var headerParts = line.Split(new[] { ' ' }, 3, StringSplitOptions.RemoveEmptyEntries);
+        string uniqueId = null;
+        string sheetName = null;
+
+        if (headerParts.Length > 1)
+        {
+            var match = Regex.Match(headerParts[1], @"\[#([a-zA-Z_]\w*)\]");
+            if (match.Success)
+            {
+                uniqueId = match.Groups[1].Value;
+            }
+        }
+
+        if (headerParts.Length > 2)
+        {
+            sheetName = headerParts[2];
+            if (!ValidSheetNameRegex.IsMatch(sheetName))
+            {
+                throw new ArgumentException($"Invalid sheet name in header line: {line}");
+            }
+        }
+
+        return new SheetSource { SheetName = sheetName, UniqueId = uniqueId, Lines = new List<LineObject>(), Hash = null };
+    }
+
+    private static string ComputeHash(List<LineObject> lines)
+    {
+        if (lines.Count == 0 || lines.All(line => !line.Line.StartsWith("#")))
+        {
+            return null;
+        }
+
+        var concatenatedLines = string.Join("\n", lines.Select(line => line.Line));
+        using (var sha256 = SHA256.Create())
+        {
+            var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(concatenatedLines));
+            return BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+        }
     }
 }
