@@ -1071,10 +1071,7 @@ public class LineSplitter
                     sheetSources.Add(currentSheetSource);
                     currentSheetSource = CreateSheetSourceFromHeader(line.Line);
                 }
-                else
-                {
-                    currentSheetSource.Lines.Add(line);
-                }
+                currentSheetSource.Lines.Add(line);
             }
             else
             {
@@ -1088,11 +1085,9 @@ public class LineSplitter
             }
         }
 
-        if (currentSheetSource.Lines.Count > 0)
-        {
-            currentSheetSource.Hash = ComputeHash(currentSheetSource.Lines);
-            sheetSources.Add(currentSheetSource);
-        }
+        // Ensure the last sheet is added even if it's empty
+        currentSheetSource.Hash = ComputeHash(currentSheetSource.Lines);
+        sheetSources.Add(currentSheetSource);
 
         return sheetSources;
     }
