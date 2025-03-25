@@ -223,3 +223,147 @@ public class Program
 * **エラー処理:** コードには簡単なエラー処理が含まれていますが、必要に応じてより堅牢なエラー処理を追加してください。
 * **JSONのシリアライズ/デシリアライズ:** 上記のコードでは、キャッシュの内容を単純な文字列として扱っています。実際には、パース結果をJSON形式でシリアライズして保存し、読み込み時にデシリアライズする必要があるでしょう。その場合は、`System.Text.Json` などのライブラリを使用してください。
 * **第1段階目のハッシュ:** 第1段階目のパース結果はファイルに出力しないとのことですので、`GetCachedResult` の呼び出しは不要かもしれません。`GenerateExcel` メソッド内で直接次の段階に渡す形になるでしょう。
+
+
+
+
+---
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+
+namespace ParserWithCache
+{
+    public class FileCache
+    {
+        private readonly string _cacheDir;
+
+        public FileCache(string cacheDir)
+        {
+            _cacheDir = cacheDir;
+            Directory.CreateDirectory(cacheDir);
+        }
+
+        private string GetCacheFilePath(string key, string suffix) => Path.Combine(_cacheDir, $"{key}{suffix}.cache");
+
+        public bool TryGetValue<T>(string key, string suffix, out T value)
+        {
+            string filePath = GetCacheFilePath(key, suffix);
+            if (File.Exists(filePath))
+            {
+                string json = File.ReadAllText(filePath);
+                value = JsonSerializer.Deserialize<T>(json);
+                return true;
+            }
+            value = default;
+            return false;
+        }
+
+        public void SetValue<T>(string key, string suffix, T value)
+        {
+            string filePath = GetCacheFilePath(key, suffix);
+            string json = JsonSerializer.Serialize(value);
+            File.WriteAllText(filePath, json);
+        }
+    }
+
+    public class Parser
+    {
+        private readonly FileCache _cache;
+
+        public Parser(string cacheDir)
+        {
+            _cache = new FileCache(cacheDir);
+        }
+
+        private static string ComputeHash(string input)
+        {
+            using var sha256 = SHA256.Create();
+            byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
+            return Convert.ToBase64String(bytes).Replace("/", "_").Replace("+", "-");
+        }
+
+        public string Parse(string source)
+        {
+            string sourceHash = ComputeHash(source);
+
+            // 最終結果がキャッシュにある場合、即返却
+            if (_cache.TryGetValue(sourceHash, "_final", out string cachedJson))
+            {
+                Console.WriteLine("Using final cache");
+                return cachedJson;
+            }
+
+            // 各段階の処理（キャッシュがあれば利用）
+            var tokens = Tokenize(source, sourceHash);
+            var intermediate = ParseSyntax(tokens, sourceHash);
+            string jsonOutput = GenerateJson(intermediate, sourceHash);
+
+            // 最終結果をキャッシュに保存
+            _cache.SetValue(sourceHash, "_final", jsonOutput);
+            return jsonOutput;
+        }
+
+        private List<string> Tokenize(string source, string sourceHash)
+        {
+            if (_cache.TryGetValue(sourceHash, "_tokens", out List<string> cachedTokens))
+            {
+                Console.WriteLine("Using cache for Tokenize");
+                return cachedTokens;
+            }
+
+            var tokens = new List<string>(source.Split(' ')); // 仮のトークン化
+            _cache.SetValue(sourceHash, "_tokens", tokens);
+            return tokens;
+        }
+
+        private Dictionary<string, object> ParseSyntax(List<string> tokens, string sourceHash)
+        {
+            if (_cache.TryGetValue(sourceHash, "_intermediate", out Dictionary<string, object> cachedIntermediate))
+            {
+                Console.WriteLine("Using cache for ParseSyntax");
+                return cachedIntermediate;
+            }
+
+            var intermediate = new Dictionary<string, object>
+            {
+                { "type", "program" },
+                { "body", tokens }
+            };
+            _cache.SetValue(sourceHash, "_intermediate", intermediate);
+            return intermediate;
+        }
+
+        private string GenerateJson(Dictionary<string, object> intermediate, string sourceHash)
+        {
+            // 最終結果はParseメソッドでキャッシュ済みのため、ここでは保存しない
+            return JsonSerializer.Serialize(intermediate, new JsonSerializerOptions { WriteIndented = true });
+        }
+    }
+
+    class Program
+    {
+        static void Main()
+        {
+            var parser = new Parser("cache");
+            string source = "let x = 10";
+
+            // 初回実行
+            string jsonOutput = parser.Parse(source);
+            Console.WriteLine(jsonOutput);
+
+            // 2回目（最終キャッシュ利用）
+            jsonOutput = parser.Parse(source);
+            Console.WriteLine(jsonOutput);
+
+            // 更新後
+            string updatedSource = "let x = 20";
+            jsonOutput = parser.Parse(updatedSource);
+            Console.WriteLine(jsonOutput);
+        }
+    }
+}
+---
