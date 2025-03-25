@@ -34,6 +34,13 @@ public class FileCache
         return false;
     }
 
+    public void SetValue<T>(string key, string suffix, T value)
+    {
+        string filePath = GetCacheFilePath(key, suffix);
+        string json = JsonSerializer.Serialize(value);
+        File.WriteAllText(filePath, json);
+    }
+
     private void IncrementHitCount(string key)
     {
         string metaPath = GetCacheFilePath(key, ".meta");
