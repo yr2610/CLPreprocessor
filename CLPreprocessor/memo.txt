@@ -1,0 +1,225 @@
+```csharp
+using System;
+using System.IO;
+using System.Text.RegularExpressions;
+using System.Text.Json;
+
+public class FileCacheManager
+{
+    private readonly string _rootCacheFolder;
+
+    public FileCacheManager(string rootCacheFolder)
+    {
+        if (string.IsNullOrEmpty(rootCacheFolder))
+        {
+            throw new ArgumentException("Cacheのルートフォルダパスは必須です。", nameof(rootCacheFolder));
+        }
+        _rootCacheFolder = rootCacheFolder;
+
+        // ルートフォルダが存在しない場合は作成
+        if (!Directory.Exists(_rootCacheFolder))
+        {
+            Directory.CreateDirectory(_rootCacheFolder);
+        }
+    }
+
+    private string GetCacheFolderForUid(string uid)
+    {
+        if (!Regex.IsMatch(uid, @"^[\w]+$"))
+        {
+            throw new ArgumentException("UIDは英数字とアンダースコアのみで構成される必要があります。", nameof(uid));
+        }
+        string uidFolderPath = Path.Combine(_rootCacheFolder, uid);
+        if (!Directory.Exists(uidFolderPath))
+        {
+            Directory.CreateDirectory(uidFolderPath);
+        }
+        return uidFolderPath;
+    }
+
+    private string GetCacheFileName(string previousHash, int parseStage)
+    {
+        return $"{previousHash}_stage{parseStage}.json";
+    }
+
+    private string GetCacheFilePath(string uid, string previousHash, int parseStage)
+    {
+        string cacheFolder = GetCacheFolderForUid(uid);
+        string cacheFileName = GetCacheFileName(previousHash, parseStage);
+        return Path.Combine(cacheFolder, cacheFileName);
+    }
+
+    public string GetCachedResult(string uid, int parseStage, string previousHash)
+    {
+        string cacheFilePath = GetCacheFilePath(uid, previousHash, parseStage);
+        if (File.Exists(cacheFilePath))
+        {
+            try
+            {
+                return File.ReadAllText(cacheFilePath);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"キャッシュファイルの読み込みに失敗しました: {cacheFilePath} - {ex.Message}");
+                return null;
+            }
+        }
+        return null;
+    }
+
+    public void SaveCacheResult(string uid, int parseStage, string currentHash, string resultJson)
+    {
+        string cacheFolder = GetCacheFolderForUid(uid);
+        string cacheFileName = GetCacheFileName(currentHash, parseStage);
+        string cacheFilePath = Path.Combine(cacheFolder, cacheFileName);
+
+        try
+        {
+            File.WriteAllText(cacheFilePath, resultJson);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"キャッシュファイルの保存に失敗しました: {cacheFilePath} - {ex.Message}");
+        }
+    }
+}
+```
+
+**使用例:**
+
+```csharp
+public class ExcelGenerator
+{
+    private readonly FileCacheManager _cacheManager;
+
+    public ExcelGenerator(string cacheRootFolder)
+    {
+        _cacheManager = new FileCacheManager(cacheRootFolder);
+    }
+
+    public string GenerateExcel(string sourceText, string uid)
+    {
+        // 第1段階パース (ファイル出力なし)
+        string stage1Result = ParseStage1(sourceText, uid);
+        string stage1Hash = CalculateHash(stage1Result);
+
+        // 第2段階パース
+        string cachedStage2Result = _cacheManager.GetCachedResult(uid, 2, stage1Hash);
+        string stage2Result;
+        string stage2Hash;
+
+        if (cachedStage2Result != null)
+        {
+            stage2Result = cachedStage2Result;
+            stage2Hash = stage1Hash; // ハッシュは変わらないと仮定
+            Console.WriteLine($"UID: {uid}, Stage 2 Cache Hit!");
+        }
+        else
+        {
+            stage2Result = ParseStage2(stage1Result, uid);
+            stage2Hash = CalculateHash(stage2Result);
+            _cacheManager.SaveCacheResult(uid, 2, stage2Hash, stage2Result);
+            Console.WriteLine($"UID: {uid}, Stage 2 Parsed and Cached.");
+        }
+
+        // 第3段階パース
+        string cachedStage3Result = _cacheManager.GetCachedResult(uid, 3, stage2Hash);
+        string stage3Result;
+        string stage3Hash;
+
+        if (cachedStage3Result != null)
+        {
+            stage3Result = cachedStage3Result;
+            stage3Hash = stage2Hash; // ハッシュは変わらないと仮定
+            Console.WriteLine($"UID: {uid}, Stage 3 Cache Hit!");
+        }
+        else
+        {
+            stage3Result = ParseStage3(stage2Result, uid);
+            stage3Hash = CalculateHash(stage3Result);
+            _cacheManager.SaveCacheResult(uid, 3, stage3Hash, stage3Result);
+            Console.WriteLine($"UID: {uid}, Stage 3 Parsed and Cached.");
+        }
+
+        // 最終的なExcel生成処理 (stage3Result を基に)
+        string excelFilePath = GenerateExcelFile(stage3Result, uid);
+        return excelFilePath;
+    }
+
+    // ハッシュ計算のサンプル (実際には適切なハッシュ関数を使用してください)
+    private string CalculateHash(string data)
+    {
+        return data?.GetHashCode().ToString(); // これは簡単な例です。SHA256などを推奨します。
+    }
+
+    // 各段階のパース処理 (実際の実装に置き換えてください)
+    private string ParseStage1(string sourceText, string uid)
+    {
+        // ... 第1段階のパース処理 ...
+        return $"Stage1Result_{uid}";
+    }
+
+    private string ParseStage2(string stage1Result, string uid)
+    {
+        // ... 第2段階のパース処理 ...
+        return $"Stage2Result_{uid}_from_{stage1Result}";
+    }
+
+    private string ParseStage3(string stage2Result, string uid)
+    {
+        // ... 第3段階のパース処理 ...
+        return $"Stage3Result_{uid}_from_{stage2Result}";
+    }
+
+    private string GenerateExcelFile(string stage3Result, string uid)
+    {
+        // ... stage3Result を基に Excel ファイルを生成する処理 ...
+        string fileName = $"output_{uid}.xlsx";
+        Console.WriteLine($"Excel ファイル '{fileName}' を生成しました。");
+        return fileName;
+    }
+}
+
+public class Program
+{
+    public static void Main(stringargs)
+    {
+        string cacheRoot = "CacheData";
+        var excelGenerator = new ExcelGenerator(cacheRoot);
+
+        string sourceText1 = "シート1の独自文法テキスト...";
+        string uid1 = "sheet_abc123";
+        excelGenerator.GenerateExcel(sourceText1, uid1);
+
+        Console.WriteLine("\n2回目の処理 (キャッシュヒットするはず):");
+        excelGenerator.GenerateExcel(sourceText1, uid1);
+
+        string sourceText2 = "シート2の独自文法テキスト...";
+        string uid2 = "sheet_xyz789";
+        excelGenerator.GenerateExcel(sourceText2, uid2);
+    }
+}
+```
+
+**解説:**
+
+* **`FileCacheManager` クラス:**
+    * コンストラクタでキャッシュのルートフォルダパスを受け取り、存在しなければ作成します。
+    * `GetCacheFolderForUid` メソッドで、UIDに基づいたフォルダパスを生成し、存在しなければ作成します。UIDの形式も簡易的にチェックしています。
+    * `GetCacheFileName` メソッドで、前の段階のハッシュ値とパース段階からキャッシュファイル名を生成します。
+    * `GetCacheFilePath` メソッドで、UID、ハッシュ値、段階から完全なキャッシュファイルパスを取得します。
+    * `GetCachedResult` メソッドで、指定された条件のキャッシュファイルが存在すれば読み込んで内容（JSON文字列）を返します。存在しない場合は `null` を返します。
+    * `SaveCacheResult` メソッドで、現在のパース結果をJSON文字列としてキャッシュファイルに保存します。ファイル名は現在のハッシュ値を使用します。
+* **`ExcelGenerator` クラス (使用例):**
+    * コンストラクタで `FileCacheManager` のインスタンスを初期化します。
+    * `GenerateExcel` メソッドが全体の処理を制御します。
+    * 各段階のパース処理 (`ParseStage1`, `ParseStage2`, `ParseStage3`) は、実際の実装に置き換えてください。
+    * `CalculateHash` メソッドは、ハッシュ値の計算を行う関数です。例として簡単な `GetHashCode()` を使用していますが、実際にはSHA256などの適切なハッシュ関数を使用することを強く推奨します。
+    * 各段階で `_cacheManager` のメソッドを呼び出し、キャッシュの取得と保存を行っています。
+
+**注意点:**
+
+* **ハッシュ関数の実装:** `CalculateHash` メソッドはサンプルとして簡単なものを使用しています。実際には、データのわずかな変更でも異なるハッシュ値が得られる、安全なハッシュ関数（例えばSHA256など）を実装してください。
+* **エラー処理:** コードには簡単なエラー処理が含まれていますが、必要に応じてより堅牢なエラー処理を追加してください。
+* **JSONのシリアライズ/デシリアライズ:** 上記のコードでは、キャッシュの内容を単純な文字列として扱っています。実際には、パース結果をJSON形式でシリアライズして保存し、読み込み時にデシリアライズする必要があるでしょう。その場合は、`System.Text.Json` などのライブラリを使用してください。
+* **第1段階目のハッシュ:** 第1段階目のパース結果はファイルに出力しないとのことですので、`GetCachedResult` の呼び出しは不要かもしれません。`GenerateExcel` メソッド内で直接次の段階に渡す形になるでしょう。
