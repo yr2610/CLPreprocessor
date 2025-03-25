@@ -8,55 +8,52 @@ using System.Threading.Tasks;
 using System.Text.Json;
 
 
-namespace CLPreprocessor
+public class FileCache
 {
-    public class FileCache
+    private readonly string _cacheDir;
+
+    public FileCache(string cacheDir)
     {
-        private readonly string _cacheDir;
+        _cacheDir = cacheDir;
+        Directory.CreateDirectory(cacheDir);
+    }
 
-        public FileCache(string cacheDir)
+    private string GetCacheFilePath(string key, string suffix) => Path.Combine(_cacheDir, $"{key}{suffix}.cache");
+
+    public bool TryGetValue<T>(string key, string suffix, out T value)
+    {
+        string filePath = GetCacheFilePath(key, suffix);
+        if (File.Exists(filePath))
         {
-            _cacheDir = cacheDir;
-            Directory.CreateDirectory(cacheDir);
+            string json = File.ReadAllText(filePath);
+            value = JsonSerializer.Deserialize<T>(json);
+            IncrementHitCount(key);
+            return true;
         }
+        value = default(T);
+        return false;
+    }
 
-        private string GetCacheFilePath(string key, string suffix) => Path.Combine(_cacheDir, $"{key}{suffix}.cache");
+    private void IncrementHitCount(string key)
+    {
+        string metaPath = GetCacheFilePath(key, ".meta");
+        var meta = File.Exists(metaPath) ? JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(metaPath)) : new Dictionary<string, int> { ["hits"] = 0 };
+        meta["hits"] = meta["hits"] + 1;
+        File.WriteAllText(metaPath, JsonSerializer.Serialize(meta));
+    }
 
-        public bool TryGetValue<T>(string key, string suffix, out T value)
+    public void Cleanup(int minHits)
+    {
+        foreach (var metaFile in Directory.GetFiles(_cacheDir, "*.meta"))
         {
-            string filePath = GetCacheFilePath(key, suffix);
-            if (File.Exists(filePath))
+            string key = Path.GetFileNameWithoutExtension(metaFile).Replace(".meta", "");
+            var meta = JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(metaFile));
+            if (meta["hits"] < minHits)
             {
-                string json = File.ReadAllText(filePath);
-                value = JsonSerializer.Deserialize<T>(json);
-                IncrementHitCount(key);
-                return true;
-            }
-            value = default(T);
-            return false;
-        }
-
-        private void IncrementHitCount(string key)
-        {
-            string metaPath = GetCacheFilePath(key, ".meta");
-            var meta = File.Exists(metaPath) ? JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(metaPath)) : new Dictionary<string, int> { ["hits"] = 0 };
-            meta["hits"] = meta["hits"] + 1;
-            File.WriteAllText(metaPath, JsonSerializer.Serialize(meta));
-        }
-
-        public void Cleanup(int minHits)
-        {
-            foreach (var metaFile in Directory.GetFiles(_cacheDir, "*.meta"))
-            {
-                string key = Path.GetFileNameWithoutExtension(metaFile).Replace(".meta", "");
-                var meta = JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(metaFile));
-                if (meta["hits"] < minHits)
+                foreach (var suffix in new[] { "_tokens", "_intermediate", "_final", ".meta" })
                 {
-                    foreach (var suffix in new[] { "_tokens", "_intermediate", "_final", ".meta" })
-                    {
-                        string filePath = GetCacheFilePath(key, suffix);
-                        if (File.Exists(filePath)) File.Delete(filePath);
-                    }
+                    string filePath = GetCacheFilePath(key, suffix);
+                    if (File.Exists(filePath)) File.Delete(filePath);
                 }
             }
         }
